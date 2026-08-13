@@ -59,6 +59,9 @@ const DEMO_PASSWORD = 'Demo1234!';
 // "colaboradores cercanos" demo) is only set for `collaborator`-role
 // accounts — matches DtService.findNearby's `role: 'collaborator'` filter,
 // since HC/DT accounts shouldn't show up as contingency coverage candidates.
+// calle/localidad/provincia were reverse-geocoded once from lat/lng via
+// Nominatim (OpenStreetMap) and hardcoded here so the seed stays
+// self-contained — no geocoding call happens at seed time.
 const DEMO_PROFILES = [
   {
     legajo: '10001',
@@ -66,7 +69,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'colaborador.demo@farmacity.com',
     branch: 'Farmacity Palermo',
-    domicilio: { lat: -34.575, lng: -58.43 },
+    domicilio: {
+      lat: -34.575,
+      lng: -58.43,
+      calle: 'Avenida Luis María Campos 131',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10002',
@@ -90,7 +99,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'martina.suarez@farmacity.com',
     branch: 'Farmacity Belgrano',
-    domicilio: { lat: -34.572, lng: -58.445 },
+    domicilio: {
+      lat: -34.572,
+      lng: -58.445,
+      calle: 'Ciudad de la Paz 609',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10005',
@@ -98,7 +113,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'diego.ramallo@farmacity.com',
     branch: 'Farmacity Rosario Centro',
-    domicilio: { lat: -32.96, lng: -60.65 },
+    domicilio: {
+      lat: -32.96,
+      lng: -60.65,
+      calle: 'España 2065',
+      localidad: 'Rosario',
+      provincia: 'Santa Fe',
+    },
   },
   // 10006+ round out the collaborator pool to ~20 across all 8 sucursales
   // (including Uruguay) so HC/DT screens have realistic volume to demo.
@@ -108,7 +129,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'sofia.martinez@farmacity.com',
     branch: 'Farmacity Palermo',
-    domicilio: { lat: -34.595, lng: -58.415 },
+    domicilio: {
+      lat: -34.595,
+      lng: -58.415,
+      calle: 'Mario Bravo 1254',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10007',
@@ -116,7 +143,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'tomas.fernandez@farmacity.com',
     branch: 'Farmacity Palermo',
-    domicilio: { lat: -34.6, lng: -58.44 },
+    domicilio: {
+      lat: -34.6,
+      lng: -58.44,
+      calle: 'Avenida Raúl Scalabrini Ortiz 210',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10008',
@@ -124,7 +157,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'valentina.lopez@farmacity.com',
     branch: 'Farmacity Belgrano',
-    domicilio: { lat: -34.55, lng: -58.46 },
+    domicilio: {
+      lat: -34.55,
+      lng: -58.46,
+      calle: 'Guayra 1927',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10009',
@@ -132,7 +171,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'agustin.diaz@farmacity.com',
     branch: 'Farmacity Belgrano',
-    domicilio: { lat: -34.57, lng: -58.47 },
+    domicilio: {
+      lat: -34.57,
+      lng: -58.47,
+      calle: 'Juramento 3770',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10010',
@@ -140,7 +185,15 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'camila.torres@farmacity.com',
     branch: 'Farmacity Rosario Centro',
-    domicilio: { lat: -32.93, lng: -60.63 },
+    // Original -32.93,-60.63 fell in the Paraná river with no reverse-geocode
+    // match; nudged ~1.5km to a real Rosario Centro address.
+    domicilio: {
+      lat: -32.94,
+      lng: -60.645,
+      calle: 'Tucumán 1700',
+      localidad: 'Rosario',
+      provincia: 'Santa Fe',
+    },
   },
   {
     legajo: '10011',
@@ -148,7 +201,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'franco.romero@farmacity.com',
     branch: 'Farmacity Rosario Centro',
-    domicilio: { lat: -32.96, lng: -60.66 },
+    domicilio: {
+      lat: -32.96,
+      lng: -60.66,
+      calle: 'Avenida Dante Alighieri',
+      localidad: 'Rosario',
+      provincia: 'Santa Fe',
+    },
   },
   {
     legajo: '10012',
@@ -156,7 +215,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'julieta.sosa@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
-    domicilio: { lat: -31.42, lng: -64.18 },
+    domicilio: {
+      lat: -31.42,
+      lng: -64.18,
+      calle: 'Obispo Salguero 220',
+      localidad: 'Córdoba',
+      provincia: 'Córdoba',
+    },
   },
   {
     legajo: '10013',
@@ -164,7 +229,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'matias.herrera@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
-    domicilio: { lat: -31.45, lng: -64.2 },
+    domicilio: {
+      lat: -31.45,
+      lng: -64.2,
+      calle: 'Avenida Vélez Sarsfield 3450',
+      localidad: 'Córdoba',
+      provincia: 'Córdoba',
+    },
   },
   {
     legajo: '10014',
@@ -172,7 +243,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'lucia.acosta@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
-    domicilio: { lat: -31.44, lng: -64.21 },
+    domicilio: {
+      lat: -31.44,
+      lng: -64.21,
+      calle: 'Rafael de Igarzabal 1217',
+      localidad: 'Córdoba',
+      provincia: 'Córdoba',
+    },
   },
   {
     legajo: '10015',
@@ -180,7 +257,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'nicolas.molina@farmacity.com',
     branch: 'Farmacity Mendoza Centro',
-    domicilio: { lat: -32.88, lng: -68.83 },
+    domicilio: {
+      lat: -32.88,
+      lng: -68.83,
+      calle: 'Juan Bautista Alberdi 472',
+      localidad: 'Ciudad de Mendoza',
+      provincia: 'Mendoza',
+    },
   },
   {
     legajo: '10016',
@@ -188,7 +271,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'florencia.rojas@farmacity.com',
     branch: 'Farmacity Mendoza Centro',
-    domicilio: { lat: -32.9, lng: -68.85 },
+    domicilio: {
+      lat: -32.9,
+      lng: -68.85,
+      calle: 'Isabel la Católica 370',
+      localidad: 'Ciudad de Mendoza',
+      provincia: 'Mendoza',
+    },
   },
   {
     legajo: '10017',
@@ -196,7 +285,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'bruno.castro@farmacity.com',
     branch: 'Farmacity Salta Centro',
-    domicilio: { lat: -24.78, lng: -65.42 },
+    domicilio: {
+      lat: -24.78,
+      lng: -65.42,
+      calle: 'Almirante Guillermo Brown 1303',
+      localidad: 'Salta',
+      provincia: 'Salta',
+    },
   },
   {
     legajo: '10018',
@@ -204,7 +299,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'milagros.vega@farmacity.com',
     branch: 'Farmacity Salta Centro',
-    domicilio: { lat: -24.79, lng: -65.4 },
+    domicilio: {
+      lat: -24.79,
+      lng: -65.4,
+      calle: 'Indalecio Gómez',
+      localidad: 'Salta',
+      provincia: 'Salta',
+    },
   },
   {
     legajo: '10019',
@@ -212,7 +313,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'rodrigo.ibanez@farmacity.com',
     branch: 'Farmacity Montevideo Pocitos',
-    domicilio: { lat: -34.91, lng: -56.16 },
+    domicilio: {
+      lat: -34.91,
+      lng: -56.16,
+      calle: 'El Viejo Pancho 2473',
+      localidad: 'Montevideo',
+      provincia: 'Montevideo',
+    },
   },
   {
     legajo: '10020',
@@ -220,7 +327,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'antonella.ferreira@farmacity.com',
     branch: 'Farmacity Montevideo Pocitos',
-    domicilio: { lat: -34.9, lng: -56.14 },
+    domicilio: {
+      lat: -34.9,
+      lng: -56.14,
+      calle: 'Marco Bruto 1454',
+      localidad: 'Montevideo',
+      provincia: 'Montevideo',
+    },
   },
   {
     legajo: '10021',
@@ -228,7 +341,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'emiliano.paz@farmacity.com',
     branch: 'Farmacity Mar del Plata',
-    domicilio: { lat: -38.0, lng: -57.55 },
+    domicilio: {
+      lat: -38.0,
+      lng: -57.55,
+      calle: 'Belgrano 2793',
+      localidad: 'Mar del Plata',
+      provincia: 'Buenos Aires',
+    },
   },
   {
     legajo: '10022',
@@ -236,7 +355,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'catalina.nunez@farmacity.com',
     branch: 'Farmacity Mar del Plata',
-    domicilio: { lat: -38.02, lng: -57.53 },
+    domicilio: {
+      lat: -38.02,
+      lng: -57.53,
+      calle: 'Leandro N. Alem 2767',
+      localidad: 'Mar del Plata',
+      provincia: 'Buenos Aires',
+    },
   },
   {
     legajo: '10023',
@@ -244,7 +369,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'ipedrosa.dev@gmail.com',
     branch: 'Farmacity Palermo',
-    domicilio: { lat: -34.58, lng: -58.42 },
+    domicilio: {
+      lat: -34.58,
+      lng: -58.42,
+      calle: 'Avenida Presidente Sarmiento 2656',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
 ] as const;
 
