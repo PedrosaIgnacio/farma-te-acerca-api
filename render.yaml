@@ -9,8 +9,10 @@ services:
     startCommand: node dist/main
     healthCheckPath: /health
     envVars:
+      # Prisma 7's CLI require()s an ESM-only dep (zeptomatch via @prisma/dev);
+      # that only works on Node >=22.12, so don't drop below this.
       - key: NODE_VERSION
-        value: 20.18.0
+        value: 22.12.0
       - key: PORT
         value: 3000
       - key: DATABASE_URL
