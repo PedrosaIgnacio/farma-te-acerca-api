@@ -389,6 +389,20 @@ const DEMO_PROFILES = [
     branch: 'Farmacity Palermo',
     domicilio: null,
   },
+  {
+    legajo: '10025',
+    fullName: 'Martín Saleme',
+    role: 'collaborator' as const,
+    email: 'martinsaleme@hotmail.com',
+    branch: 'Farmacity Belgrano',
+    domicilio: {
+      lat: -34.565,
+      lng: -58.455,
+      calle: 'La Pampa',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
+  },
 ] as const;
 
 // 20 demo solicitudes, spread across colaboradores/sucursales/estados/dates so
