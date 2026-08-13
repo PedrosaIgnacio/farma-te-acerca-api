@@ -22,9 +22,9 @@ requires an explicit driver adapter) + **Supabase Auth** for identity (see `DEVI
    `SUPABASE_ANON_KEY`, `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (server-side only, never
    ship this to the frontend).
 4. **Authentication → Email Templates → Reset password**: switch it to include `{{ .Token }}`
-   (a 6-digit code) rather than the default magic-link `{{ .ConfirmationURL }}` — the frontend's
-   "¿Olvidaste tu contraseña?" dialog is a 3-step email → code → new-password wizard, which needs
-   the code, not a link.
+   (a numeric code, observed as 8 digits) rather than the default magic-link
+   `{{ .ConfirmationURL }}` — the frontend's "¿Olvidaste tu contraseña?" dialog is a 3-step
+   email → code → new-password wizard, which needs the code, not a link.
 5. **Authentication → Providers → Azure**: needed for the "SSO con usuario de 365" requirement.
    Requires a real Azure AD app registration/tenant from Farmacity — see `DEVIATIONS.md` §7; skip
    this step until those credentials exist, the rest of the API works without it.

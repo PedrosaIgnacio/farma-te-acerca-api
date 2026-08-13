@@ -377,6 +377,18 @@ const DEMO_PROFILES = [
       provincia: 'Ciudad Autónoma de Buenos Aires',
     },
   },
+  // Test-only account: Resend's sandbox sender (onboarding@resend.dev, no
+  // verified domain yet) only delivers to the email registered on the
+  // Resend account itself — this lets us exercise the forgot/reset-password
+  // flow end to end against a real inbox until a custom domain is verified.
+  {
+    legajo: '10024',
+    fullName: 'Ignacio Pedrosa (SMTP test)',
+    role: 'collaborator' as const,
+    email: 'ignaciopedrosa1998@gmail.com',
+    branch: 'Farmacity Palermo',
+    domicilio: null,
+  },
 ] as const;
 
 // 20 demo solicitudes, spread across colaboradores/sucursales/estados/dates so
