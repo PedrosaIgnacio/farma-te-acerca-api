@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Mirrors the frontend's `Role` union (src/types/index.ts).
+enum Role {
+  collaborator
+  hc
+  dt
+}
+
+// Mirrors the frontend's `Reason` union.
+enum ReasonType {
+  Mudanza
+  Movilidad
+  Estudios
+  Otro
+}
+
+// Mirrors the frontend's `RequestStatus` union. Modeled as an enum rather than
+// the approved diagram's separate `Estados` lookup table — see DEVIATIONS.md.
+enum RequestStatus {
+  Activa
+  EnCurso   @map("En curso")
+  Cancelada
+  Finalizada
+}
+
+// Replaces the diagram's `Colaborador` table minus `username`/`Pass`: Supabase
+// Auth (`auth.users`) owns credentials, `id` here is set to the matching
+// `auth.users.id` by AuthService on first login/provisioning. See DEVIATIONS.md.
+model Profile {
+  id             String    @id @default(uuid())
+  legajo         String    @unique
+  fullName       String
+  role           Role
+  email          String    @unique
+  phone          String?
+  active         Boolean   @default(true)
+  // Implements the "block after 5 failed attempts" requirement, which
+  // Supabase Auth does not enforce on its own. Reset to 0 whenever the
+  // colaborador successfully resets their password (the case de uso's only
+  // documented unlock path — there's no auto-expiry).
+  failedAttempts Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sucursales    ColaboradorSucursal[]
+  solicitudes   Solicitud[]
+  estadoEventos SolicitudEstado[]
+  domicilio     Domicilio?
+
+  @@map("profiles")
+}
+
+// Mirrors the diagram's `Sucursales` table; also serves the frontend's
+// `Branch` shape (`id`, `name`/`nombre`, `region`, `zone`/`zona`). `lat`/`lng`
+// power DT's real-geodistance "colaboradores cercanos" query.
+model Sucursal {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  region String
+  zona   String
+  activa Boolean @default(true)
+  lat    Float?
+  lng    Float?
+
+  colaboradores       ColaboradorSucursal[]
+  solicitudesActuales  Solicitud[] @relation("SolicitudSucursalActual")
+  solicitudesDeseadas  Solicitud[] @relation("SolicitudSucursalDeseada")
+
+  @@map("sucursales")
+}
+
+// Mirrors the diagram's `colab_domicilio`, simplified: only what's needed to
+// compute distance to a sucursal (see DtService.findNearby) plus enough
+// fields to display a human-readable address. 1:1 with Profile, populated
+// manually (seed/Prisma Studio) — no CRUD endpoint, same boundary as
+// Sucursal/Profile (real data comes from Farmacity's HR feed, out of scope).
+model Domicilio {
+  id          Int      @id @default(autoincrement())
+  colabId     String   @unique
+  colaborador Profile  @relation(fields: [colabId], references: [id])
+  calle       String?
+  localidad   String?
+  provincia   String?
+  lat         Float
+  lng         Float
+
+  @@map("domicilios")
+}
+
+// Mirrors the diagram's `Colab_sucursal`: assignment history. The row with
+// `activo = true` for a given colaborador is their current branch.
+model ColaboradorSucursal {
+  id          Int      @id @default(autoincrement())
+  colabId     String
+  colaborador Profile  @relation(fields: [colabId], references: [id])
+  sucursalId  Int
+  sucursal    Sucursal @relation(fields: [sucursalId], references: [id])
+  fecha       DateTime @default(now())
+  activo      Boolean  @default(true)
+
+  @@index([colabId, activo])
+  @@map("colaborador_sucursal")
+}
+
+// Mirrors the diagram's `Solicitudes`. `estado` is denormalized from the
+// latest `SolicitudEstado` row for fast filtering (HC's "por sucursal" query
+// and the analytics aggregates read this field directly).
+model Solicitud {
+  id                Int           @id @default(autoincrement())
+  colabId           String
+  colaborador       Profile       @relation(fields: [colabId], references: [id])
+  sucursalActualId  Int
+  sucursalActual    Sucursal      @relation("SolicitudSucursalActual", fields: [sucursalActualId], references: [id])
+  sucursalDeseadaId Int
+  sucursalDeseada   Sucursal      @relation("SolicitudSucursalDeseada", fields: [sucursalDeseadaId], references: [id])
+  reason            ReasonType
+  otherReason       String?
+  description       String?
+  fecha             DateTime      @default(now())
+  estado            RequestStatus @default(Activa)
+
+  historial SolicitudEstado[]
+
+  @@index([sucursalDeseadaId, estado])
+  @@index([colabId])
+  @@map("solicitudes")
+}
+
+// Mirrors the diagram's `Solicitud_estado`: append-only audit trail of every
+// state transition a solicitud goes through.
+model SolicitudEstado {
+  id          Int           @id @default(autoincrement())
+  solicitudId Int
+  solicitud   Solicitud     @relation(fields: [solicitudId], references: [id])
+  colabId     String
+  colaborador Profile       @relation(fields: [colabId], references: [id])
+  estado      RequestStatus
+  fecha       DateTime      @default(now())
+
+  @@index([solicitudId])
+  @@map("solicitud_estado")
+}
