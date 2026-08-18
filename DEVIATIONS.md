@@ -184,3 +184,20 @@ anterior.
 **Por qué:** el frontend ya depende de este campo (tipo `Reason`,
 `src/types/index.ts`); eliminarlo sería una regresión de producto, no una
 simplificación pedida por nadie.
+
+## 14. `CambioEstadoSolicitud.motivo` — no está en el diagrama
+
+Se agrega `motivo` (nullable) a `CambioEstadoSolicitud` para que HC pueda
+registrar por qué cambió el estado de una solicitud, capturado en un modal
+que dispara un menú kebab por fila en `HumanCapitalPage` (`PATCH
+/hc/requests/:id/status`, ahora con `{ status, motivo }`).
+
+**Por qué:** pedido explícito para la feature de cambio de estado — sin
+este campo, HC no tiene forma de dejar constancia del motivo de la
+transición, algo que el §8 ya identificaba como trazabilidad perdida
+respecto a la implementación anterior (aunque ahí se refería a "quién", no
+a "por qué").
+
+Es nullable porque: 1) la fila inicial en "Activa" que crea
+`RequestsService.create` no es una transición real, y 2) las filas de
+`historial` creadas antes de este campo no tienen motivo.

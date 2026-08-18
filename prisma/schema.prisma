@@ -204,6 +204,12 @@ model Solicitud {
 // `SolicitudEstado`, this no longer records which colaborador made the
 // change (matches the diagram literally) — that data is lost on purpose.
 // See DEVIATIONS.md §8.
+//
+// `motivo` is NOT in the diagram — deviation added so HC can record why a
+// solicitud's estado changed (surfaced via the "cambiar estado" modal in
+// HumanCapitalPage). Nullable because the initial "Activa" row created by
+// RequestsService.create isn't a real transition and rows from before this
+// field existed have none. See DEVIATIONS.md §14.
 model CambioEstadoSolicitud {
   id          Int             @id @default(autoincrement())
   solicitudId Int             @map("id_solicitud")
@@ -212,6 +218,7 @@ model CambioEstadoSolicitud {
   estado      EstadoSolicitud @relation(fields: [estadoId], references: [id])
   fechaInicio DateTime        @default(now()) @map("fecha_inicio")
   fechaFin    DateTime?       @map("fecha_fin")
+  motivo      String?
 
   @@index([solicitudId])
   @@map("cambio_estado_solicitud")

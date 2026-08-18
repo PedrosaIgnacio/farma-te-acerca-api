@@ -38,7 +38,7 @@ export class HcService {
   // atomically: 1) close the currently-open CambioEstadoSolicitud interval,
   // 2) open a new one for the target estado, 3) update the denormalized
   // Solicitud.estadoActualId cache to match.
-  async updateRequestStatus(id: number, status: EstadoNombre) {
+  async updateRequestStatus(id: number, status: EstadoNombre, motivo: string) {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: HC_REQUEST_INCLUDE,
@@ -60,7 +60,7 @@ export class HcService {
         data: { fechaFin: new Date() },
       }),
       this.prisma.cambioEstadoSolicitud.create({
-        data: { solicitudId: id, estadoId: nuevoEstado.id },
+        data: { solicitudId: id, estadoId: nuevoEstado.id, motivo },
       }),
       this.prisma.solicitud.update({
         where: { id },
