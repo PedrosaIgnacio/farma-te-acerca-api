@@ -625,7 +625,6 @@ async function main() {
         motivo: demo.reason,
         otroMotivo: demo.otherReason,
         fechaCreacion: fecha,
-        estadoActualId: estadoId,
         historial: {
           create: { estadoId, fechaInicio: fecha },
         },

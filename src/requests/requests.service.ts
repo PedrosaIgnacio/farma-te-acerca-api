@@ -4,7 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { OPEN_STATUSES, formatDateEsAr } from '../common/status.util';
+import {
+  OPEN_STATUSES,
+  CURRENT_ESTADO_INCLUDE,
+  currentEstadoNombre,
+  formatDateEsAr,
+} from '../common/status.util';
 import { CreateRequestDto } from './dto/create-request.dto';
 
 @Injectable()
@@ -24,15 +29,18 @@ export class RequestsService {
       where: {
         colabId,
         sucursalDeseadaId: dto.desiredBranchId,
-        estadoActual: { nombre: { in: OPEN_STATUSES } },
+        historial: {
+          some: { fechaFin: null, estado: { nombre: { in: OPEN_STATUSES } } },
+        },
       },
-      include: { estadoActual: true },
+      include: CURRENT_ESTADO_INCLUDE,
     });
     if (existing) {
+      const existingStatus = currentEstadoNombre(existing);
       throw new ConflictException({
-        message: `Ya tenés una solicitud ${existing.estadoActual.nombre} a esta sucursal (N° ${existing.id}). No es posible duplicarla.`,
+        message: `Ya tenés una solicitud ${existingStatus} a esta sucursal (N° ${existing.id}). No es posible duplicarla.`,
         existingRequestId: existing.id,
-        existingStatus: existing.estadoActual.nombre,
+        existingStatus,
       });
     }
 
@@ -48,19 +56,18 @@ export class RequestsService {
         motivo: dto.reason,
         otroMotivo: dto.reason === 'Otro' ? dto.otherReason : null,
         descripcion: dto.description,
-        estadoActualId: estadoActivo.id,
         historial: {
           create: { estadoId: estadoActivo.id },
         },
       },
-      include: { sucursalDeseada: true, estadoActual: true },
+      include: { sucursalDeseada: true, ...CURRENT_ESTADO_INCLUDE },
     });
 
     return {
       id: solicitud.id,
       branch: solicitud.sucursalDeseada.nombre,
       date: formatDateEsAr(solicitud.fechaCreacion),
-      status: solicitud.estadoActual.nombre,
+      status: currentEstadoNombre(solicitud),
     };
   }
 
@@ -68,14 +75,14 @@ export class RequestsService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { colabId },
       orderBy: { fechaCreacion: 'desc' },
-      include: { sucursalDeseada: true, estadoActual: true },
+      include: { sucursalDeseada: true, ...CURRENT_ESTADO_INCLUDE },
     });
 
     return solicitudes.map((solicitud) => ({
       id: solicitud.id,
       branch: solicitud.sucursalDeseada.nombre,
       date: formatDateEsAr(solicitud.fechaCreacion),
-      status: solicitud.estadoActual.nombre,
+      status: currentEstadoNombre(solicitud),
     }));
   }
 }

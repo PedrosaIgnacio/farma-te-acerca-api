@@ -110,25 +110,29 @@ pierde la posibilidad de saber "qué colaborador ejecutó" cada transición de
 estado; cualquier feature futura de auditoría por usuario deberá agregar esa
 columna de nuevo.
 
-## 9. `Solicitud.estadoActualId` — cache denormalizada, no está en el diagrama
+## 9. `Solicitud.estadoActualId` — RESUELTA
 
-El diagrama calcula el estado vigente de una solicitud como la fila de
-`Cambio_Estado_Solicitud` con `fecha_fin IS NULL`. Se mantiene además un FK
-denormalizado (`Solicitud.estadoActualId`) que cachea esa fila.
+Se había agregado un FK denormalizado (`Solicitud.estadoActualId`) que
+cacheaba la fila de `Cambio_Estado_Solicitud` con `fecha_fin IS NULL`, para
+evitar una subquery correlacionada en las consultas de `HcService` que
+filtran/agrupan por estado (analytics, export CSV, "solicitudes por
+sucursal"). El diagrama no tiene ese campo — calcula el estado vigente de
+una solicitud directamente como la fila de `Cambio_Estado_Solicitud` con
+`fecha_fin IS NULL`.
 
-**Por qué:** mismo motivo que el campo `estado` denormalizado de la
-implementación anterior — `HcService` filtra y agrupa por estado
-constantemente (analytics, export CSV, "solicitudes por sucursal"); sin esta
-cache cada consulta necesitaría una subquery correlacionada por fila.
-
-**Cómo mantenerlo sincronizado:** cualquier código que transicione el estado
-de una solicitud debe, en una transacción: 1) cerrar el intervalo abierto
-vigente en `CambioEstadoSolicitud` (`fechaFin = now()`), 2) crear uno nuevo
-(`fechaInicio = now()`, `fechaFin = null`), 3) actualizar
-`Solicitud.estadoActualId` para que apunte a la fila nueva. Ningún endpoint
-hace esto hoy — solo existe la creación inicial en `Activa`
-(`RequestsService.create`); queda pendiente para quien implemente la primera
-transición de estado real (ej. HC pasando una solicitud a "En curso").
+**Resolución:** se quitó `estadoActualId` de `Solicitud` a pedido explícito
+del director de tesis — el diagrama se sigue al pie de la letra en este
+punto, sin la cache denormalizada. `CURRENT_ESTADO_INCLUDE`/
+`currentEstadoNombre` en `src/common/status.util.ts` centralizan el patrón
+"traer/leer la fila de `historial` con `fechaFin: null`" para que cada
+service no repita esa lógica. `CambioEstadoSolicitud` gana índices
+(`solicitudId, fechaFin`) y (`estadoId, fechaFin`) para que ese lookup y los
+filtros por estado sigan siendo baratos sin la cache. Cualquier código que
+transicione el estado de una solicitud debe seguir haciendo, en una
+transacción: 1) cerrar el intervalo abierto vigente en
+`CambioEstadoSolicitud` (`fechaFin = now()`), 2) crear uno nuevo
+(`fechaInicio = now()`, `fechaFin = null`) — ya no hay un tercer paso de
+sincronización.
 
 ## 10. `Colab_Sucursales` mantiene id propio, no la PK compuesta del diagrama
 

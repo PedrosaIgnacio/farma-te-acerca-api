@@ -5,6 +5,8 @@ import {
   EstadoNombre,
   STATUS_COLOR,
   STATUS_ORDER,
+  CURRENT_ESTADO_INCLUDE,
+  currentEstadoNombre,
   formatDateEsAr,
 } from '../common/status.util';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
@@ -13,7 +15,7 @@ const HC_REQUEST_INCLUDE = {
   colaborador: true,
   sucursalActual: true,
   sucursalDeseada: true,
-  estadoActual: true,
+  ...CURRENT_ESTADO_INCLUDE,
 } satisfies Prisma.SolicitudInclude;
 
 type SolicitudWithRelations = Prisma.SolicitudGetPayload<{
@@ -34,10 +36,10 @@ export class HcService {
     return solicitudes.map(toHcRequest);
   }
 
-  // Transitions a solicitud to a new estado. Per DEVIATIONS.md §9, this must
-  // atomically: 1) close the currently-open CambioEstadoSolicitud interval,
-  // 2) open a new one for the target estado, 3) update the denormalized
-  // Solicitud.estadoActualId cache to match.
+  // Transitions a solicitud to a new estado. Per DEVIATIONS.md §9, a
+  // solicitud's estado is purely derived from CambioEstadoSolicitud, so this
+  // must atomically: 1) close the currently-open interval (`fechaFin =
+  // now()`), 2) open a new one for the target estado.
   async updateRequestStatus(id: number, status: EstadoNombre, motivo: string) {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
@@ -46,7 +48,7 @@ export class HcService {
     if (!solicitud) {
       throw new NotFoundException('Solicitud inexistente.');
     }
-    if (solicitud.estadoActual.nombre === status) {
+    if (currentEstadoNombre(solicitud) === status) {
       return toHcRequest(solicitud);
     }
 
@@ -62,10 +64,6 @@ export class HcService {
       this.prisma.cambioEstadoSolicitud.create({
         data: { solicitudId: id, estadoId: nuevoEstado.id, motivo },
       }),
-      this.prisma.solicitud.update({
-        where: { id },
-        data: { estadoActualId: nuevoEstado.id },
-      }),
     ]);
 
     const updated = await this.prisma.solicitud.findUniqueOrThrow({
@@ -79,7 +77,7 @@ export class HcService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: this.buildWhere(filters),
       select: {
-        estadoActual: { select: { nombre: true } },
+        ...CURRENT_ESTADO_INCLUDE,
         sucursalDeseada: {
           select: {
             provincia: { select: { region: { select: { nombre: true } } } },
@@ -90,10 +88,10 @@ export class HcService {
 
     const total = solicitudes.length;
     const activas = solicitudes.filter(
-      (s) => s.estadoActual.nombre === 'Activa',
+      (s) => currentEstadoNombre(s) === 'Activa',
     ).length;
     const exitosas = solicitudes.filter(
-      (s) => s.estadoActual.nombre === 'Finalizada',
+      (s) => currentEstadoNombre(s) === 'Finalizada',
     ).length;
     const successRate = total === 0 ? 0 : Math.round((exitosas / total) * 100);
 
@@ -108,7 +106,7 @@ export class HcService {
 
     const byStatus = new Map<EstadoNombre, number>();
     for (const s of solicitudes) {
-      const estado = s.estadoActual.nombre as EstadoNombre;
+      const estado = currentEstadoNombre(s) as EstadoNombre;
       byStatus.set(estado, (byStatus.get(estado) ?? 0) + 1);
     }
     const statusData = STATUS_ORDER.map((estado) => ({
@@ -133,12 +131,7 @@ export class HcService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: this.buildWhere(filters),
       orderBy: { fechaCreacion: 'desc' },
-      include: {
-        colaborador: true,
-        sucursalActual: true,
-        sucursalDeseada: true,
-        estadoActual: true,
-      },
+      include: HC_REQUEST_INCLUDE,
     });
 
     const header = [
@@ -161,7 +154,7 @@ export class HcService {
         solicitud.sucursalDeseada.nombre,
         solicitud.motivo,
         formatDateEsAr(solicitud.fechaCreacion),
-        solicitud.estadoActual.nombre,
+        currentEstadoNombre(solicitud),
         solicitud.colaborador.email,
       ]
         .map(csvEscape)
@@ -177,7 +170,9 @@ export class HcService {
       where.sucursalDeseadaId = filters.desiredBranchId;
     }
     if (filters.estado) {
-      where.estadoActual = { nombre: filters.estado };
+      where.historial = {
+        some: { fechaFin: null, estado: { nombre: filters.estado } },
+      };
     }
     if (filters.region) {
       where.sucursalDeseada = {
@@ -209,7 +204,7 @@ function toHcRequest(solicitud: SolicitudWithRelations) {
     desiredBranch: solicitud.sucursalDeseada.nombre,
     reason: solicitud.motivo,
     date: formatDateEsAr(solicitud.fechaCreacion),
-    status: solicitud.estadoActual.nombre,
+    status: currentEstadoNombre(solicitud),
     email: solicitud.colaborador.email,
   };
 }

@@ -43,8 +43,7 @@ model EstadoSolicitud {
   id     Int    @id @default(autoincrement())
   nombre String @unique
 
-  cambios             CambioEstadoSolicitud[]
-  solicitudesEnEstado Solicitud[]
+  cambios CambioEstadoSolicitud[]
 
   @@map("estados_solicitud")
 }
@@ -168,42 +167,40 @@ model ColabSucursal {
 
 // Mirrors the diagram's `Solicitudes`. `motivo`/`otroMotivo` are NOT in the
 // diagram but are kept because the frontend already depends on them (see
-// DEVIATIONS.md §13). `estadoActualId` is NOT in the diagram either: it
-// denormalizes the `CambioEstadoSolicitud` row with `fechaFin = null` for
-// fast filtering (HC's "por sucursal" query and the analytics aggregates
-// read this directly instead of a correlated subquery per row). Any code
-// that transitions a solicitud's estado MUST, in one transaction:
+// DEVIATIONS.md §13). There is deliberately NO denormalized "current estado"
+// field here (see resolved DEVIATIONS.md §9) — the diagram computes a
+// solicitud's current estado as its `CambioEstadoSolicitud` row with
+// `fechaFin IS NULL`, and this schema matches that literally. Any code that
+// transitions a solicitud's estado MUST, in one transaction:
 // 1) close the currently-open `CambioEstadoSolicitud` row (`fechaFin = now()`),
-// 2) insert a new one (`fechaInicio = now()`, `fechaFin = null`),
-// 3) update this field to match. See DEVIATIONS.md §9.
+// 2) insert a new one (`fechaInicio = now()`, `fechaFin = null`).
 model Solicitud {
-  id                Int             @id @default(autoincrement())
-  colabId           String          @map("id_colab")
-  colaborador       Colaborador     @relation(fields: [colabId], references: [id])
-  sucursalActualId  Int             @map("sucursal_actual")
-  sucursalActual    Sucursal        @relation("SolicitudSucursalActual", fields: [sucursalActualId], references: [id])
-  sucursalDeseadaId Int             @map("sucursal_deseada")
-  sucursalDeseada   Sucursal        @relation("SolicitudSucursalDeseada", fields: [sucursalDeseadaId], references: [id])
+  id                Int         @id @default(autoincrement())
+  colabId           String      @map("id_colab")
+  colaborador       Colaborador @relation(fields: [colabId], references: [id])
+  sucursalActualId  Int         @map("sucursal_actual")
+  sucursalActual    Sucursal    @relation("SolicitudSucursalActual", fields: [sucursalActualId], references: [id])
+  sucursalDeseadaId Int         @map("sucursal_deseada")
+  sucursalDeseada   Sucursal    @relation("SolicitudSucursalDeseada", fields: [sucursalDeseadaId], references: [id])
   motivo            Motivo
-  otroMotivo        String?         @map("otro_motivo")
+  otroMotivo        String?     @map("otro_motivo")
   descripcion       String?
-  fechaCreacion     DateTime        @default(now()) @map("fecha_creacion")
-  estadoActualId    Int             @map("id_estado_actual")
-  estadoActual      EstadoSolicitud @relation(fields: [estadoActualId], references: [id])
+  fechaCreacion     DateTime    @default(now()) @map("fecha_creacion")
 
   historial CambioEstadoSolicitud[]
 
-  @@index([sucursalDeseadaId, estadoActualId])
+  @@index([sucursalDeseadaId])
   @@index([colabId])
   @@map("solicitudes")
 }
 
 // Mirrors the diagram's `Cambio_Estado_Solicitud`: append-only audit trail
 // of every state transition, modeled as intervals per the diagram —
-// `fechaFin = null` means "currently in this estado". Unlike today's
-// `SolicitudEstado`, this no longer records which colaborador made the
-// change (matches the diagram literally) — that data is lost on purpose.
-// See DEVIATIONS.md §8.
+// `fechaFin = null` means "currently in this estado", and this is the only
+// place a solicitud's current estado lives (see resolved DEVIATIONS.md §9).
+// Unlike today's `SolicitudEstado`, this no longer records which
+// colaborador made the change (matches the diagram literally) — that data
+// is lost on purpose. See DEVIATIONS.md §8.
 //
 // `motivo` is NOT in the diagram — deviation added so HC can record why a
 // solicitud's estado changed (surfaced via the "cambiar estado" modal in
@@ -220,6 +217,10 @@ model CambioEstadoSolicitud {
   fechaFin    DateTime?       @map("fecha_fin")
   motivo      String?
 
-  @@index([solicitudId])
+  // Speeds up "find the currently-open interval for a solicitud" (every
+  // status read/transition does this) and "find solicitudes currently in
+  // estado X" (HC filtering/analytics).
+  @@index([solicitudId, fechaFin])
+  @@index([estadoId, fechaFin])
   @@map("cambio_estado_solicitud")
 }
