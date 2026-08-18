@@ -28,15 +28,15 @@ the `auth.users` entry. `Profile.failedAttempts` implements the "block after
 resets to 0 only when the colaborador successfully resets their password —
 the same unlock path the case de uso's alternate course already describes.
 
-## 2. `Estados` modeled as an enum, not a table
+## 2. `Estados` modeled as an enum, not a table — RESUELTA
 
-The diagram has a separate `Estados` lookup table (`id_estado`, `descripcion`,
-`activo`). This implementation uses a fixed Postgres enum (`RequestStatus`:
-`Activa` / `En curso` / `Cancelada` / `Finalizada`) instead.
-
-**Why:** the four states are fixed by the functional spec and the frontend's
-`RequestStatus` union — a lookup table only pays off if the set of states
-needs to change without a deploy, which isn't a stated requirement.
+**Resuelto por la migración a la base normalizada (agosto 2026).** `Estados`
+(`EstadoSolicitud`) y `Roles` (`Rol`) pasan a ser tablas reales, siguiendo el
+diagrama al pie de la letra. La aplicación conserva type-safety en
+TypeScript vía union types escritos a mano (`Role` en `src/auth/types.ts`,
+`EstadoNombre` en `src/common/status.util.ts`), resueltos contra esas tablas
+por `nombre` (columna `@unique`) mediante relation filters / `connect` —
+sin capa de caché de ids. Ver también §7-§13 más abajo.
 
 ## 3. Contact info collapsed to one email + one phone
 
@@ -96,3 +96,91 @@ provider is turned on in the dashboard. It hasn't been exercised end-to-end
 because that requires Farmacity's real Azure AD app registration/tenant
 credentials, which this thesis project doesn't have access to. Treat as
 configured-but-unverified until those credentials exist.
+
+## 8. `Cambio_Estado_Solicitud` no registra quién ejecutó el cambio
+
+A diferencia de la implementación anterior (`SolicitudEstado.colabId`), el
+diagrama modela esta tabla solo con `fecha_inicio`/`fecha_fin`/
+`id_estado_solicitud`/`id_solicitud`. Se sigue el diagrama literalmente.
+
+**Por qué:** decisión explícita al planificar la migración a la base
+normalizada — se prioriza seguir el diagrama al pie de la letra sobre
+preservar esta trazabilidad, que hoy no se expone por ningún endpoint. Se
+pierde la posibilidad de saber "qué colaborador ejecutó" cada transición de
+estado; cualquier feature futura de auditoría por usuario deberá agregar esa
+columna de nuevo.
+
+## 9. `Solicitud.estadoActualId` — cache denormalizada, no está en el diagrama
+
+El diagrama calcula el estado vigente de una solicitud como la fila de
+`Cambio_Estado_Solicitud` con `fecha_fin IS NULL`. Se mantiene además un FK
+denormalizado (`Solicitud.estadoActualId`) que cachea esa fila.
+
+**Por qué:** mismo motivo que el campo `estado` denormalizado de la
+implementación anterior — `HcService` filtra y agrupa por estado
+constantemente (analytics, export CSV, "solicitudes por sucursal"); sin esta
+cache cada consulta necesitaría una subquery correlacionada por fila.
+
+**Cómo mantenerlo sincronizado:** cualquier código que transicione el estado
+de una solicitud debe, en una transacción: 1) cerrar el intervalo abierto
+vigente en `CambioEstadoSolicitud` (`fechaFin = now()`), 2) crear uno nuevo
+(`fechaInicio = now()`, `fechaFin = null`), 3) actualizar
+`Solicitud.estadoActualId` para que apunte a la fila nueva. Ningún endpoint
+hace esto hoy — solo existe la creación inicial en `Activa`
+(`RequestsService.create`); queda pendiente para quien implemente la primera
+transición de estado real (ej. HC pasando una solicitud a "En curso").
+
+## 10. `Colab_Sucursales` mantiene id propio, no la PK compuesta del diagrama
+
+El diagrama define `Colab_Sucursales` con PK compuesta
+(`id_colab`, `id_sucursal`) — un colaborador solo podría tener una fila
+histórica por sucursal. Esta implementación (`ColabSucursal`) mantiene su
+propio id autoincremental + índice (`colabId`, `activo`), igual que la
+implementación anterior (`ColaboradorSucursal`).
+
+**Por qué:** permite reasignar a un colaborador a la misma sucursal más de
+una vez en momentos distintos (ej: vuelve a una sucursal donde ya trabajó
+antes), preservando el historial completo de asignaciones.
+
+## 11. `Sucursal.region`/`zona` y `Domicilio.provincia` → jerarquía `Region`→`Provincia`
+
+La implementación anterior tenía `Sucursal.region`/`Sucursal.zona` y
+`Domicilio.provincia` como strings sueltos, sin relación entre sí. Se
+reemplazan por las tablas normalizadas `Region`/`Provincia` del diagrama
+(`ColabDomicilio.provinciaId` y `Sucursal.provinciaId`, ambas apuntando a la
+misma jerarquía). El concepto de "zona" desaparece — no existe en el
+diagrama nuevo.
+
+**Datos del seed:** `Region`/`Provincia` se siembran con las 6 regiones
+oficiales de Argentina y las 24 provincias (ids explícitos provistos por el
+director de tesis), más una región "Internacional" (id 7) y una provincia
+"Montevideo" (id 25) agregadas — no forman parte de la lista oficial — para
+cubrir la única sucursal/colaboradores demo fuera de Argentina (Farmacity
+Montevideo Pocitos).
+
+**Impacto en la API:** `GET /branches` pierde el campo `zone` y gana
+`provincia`; el valor de `region` pasa a ser una de las 6 regiones
+argentinas oficiales (o "Internacional") en vez de los strings libres
+anteriores (`CABA`, `Santa Fe`, `Uruguay`, etc). El query param `zona` de
+`GET /hc/analytics` / `GET /hc/requests/export` se elimina; `region` ahora
+debe ser uno de esos 7 valores. Ver `MIGRATION_NOTES.md`.
+
+## 12. `ColabDomicilio.localidad` — no está en el diagrama
+
+El diagrama define `Colab_Domicilios` solo con `calle`/`id_provincia`/
+`lat`/`lng`. Se mantiene `localidad` como campo adicional de solo
+visualización, igual que la implementación anterior.
+
+**Por qué:** conveniencia ya usada por el seed de datos demo (ej. "Rosario",
+"Ciudad de Mendoza"), sin costo real — nada más la relee hoy.
+
+## 13. `Solicitud.motivo`/`otroMotivo` — no están en el diagrama
+
+El diagrama nuevo no incluye motivo de traslado en `Solicitudes`. Se
+mantienen (`motivo`/`otroMotivo`, antes `reason`/`otherReason`) como
+continuación explícita de la decisión ya tomada para la implementación
+anterior.
+
+**Por qué:** el frontend ya depende de este campo (tipo `Reason`,
+`src/types/index.ts`); eliminarlo sería una regresión de producto, no una
+simplificación pedida por nadie.

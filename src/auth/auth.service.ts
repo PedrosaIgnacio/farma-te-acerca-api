@@ -19,31 +19,34 @@ export class AuthService {
   ) {}
 
   async login({ legajo, password }: LoginDto) {
-    const profile = await this.prisma.profile.findUnique({ where: { legajo } });
+    const colaborador = await this.prisma.colaborador.findUnique({
+      where: { legajo },
+      include: { rol: true },
+    });
     const invalidCredentials = () =>
       new UnauthorizedException('Usuario o contraseña incorrectos.');
 
-    if (!profile || !profile.active) {
+    if (!colaborador || !colaborador.activo) {
       throw invalidCredentials();
     }
-    if (profile.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+    if (colaborador.intentosFallidos >= MAX_FAILED_ATTEMPTS) {
       throw new UnauthorizedException(
         'Usuario bloqueado por intentos fallidos. Restablecé tu contraseña para continuar.',
       );
     }
 
     const { data, error } = await this.supabase.anon.auth.signInWithPassword({
-      email: profile.email,
+      email: colaborador.email,
       password,
     });
 
     if (error || !data.session) {
-      const failedAttempts = profile.failedAttempts + 1;
-      await this.prisma.profile.update({
-        where: { id: profile.id },
-        data: { failedAttempts },
+      const intentosFallidos = colaborador.intentosFallidos + 1;
+      await this.prisma.colaborador.update({
+        where: { id: colaborador.id },
+        data: { intentosFallidos },
       });
-      if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      if (intentosFallidos >= MAX_FAILED_ATTEMPTS) {
         throw new UnauthorizedException(
           'Usuario bloqueado por intentos fallidos. Restablecé tu contraseña para continuar.',
         );
@@ -51,10 +54,10 @@ export class AuthService {
       throw invalidCredentials();
     }
 
-    if (profile.failedAttempts > 0) {
-      await this.prisma.profile.update({
-        where: { id: profile.id },
-        data: { failedAttempts: 0 },
+    if (colaborador.intentosFallidos > 0) {
+      await this.prisma.colaborador.update({
+        where: { id: colaborador.id },
+        data: { intentosFallidos: 0 },
       });
     }
 
@@ -63,10 +66,10 @@ export class AuthService {
       refreshToken: data.session.refresh_token,
       expiresIn: data.session.expires_in,
       user: {
-        legajo: profile.legajo,
-        fullName: profile.fullName,
-        role: profile.role,
-        email: profile.email,
+        legajo: colaborador.legajo,
+        fullName: colaborador.nombre,
+        role: colaborador.rol.nombre,
+        email: colaborador.email,
       },
     };
   }
@@ -98,9 +101,9 @@ export class AuthService {
 
     // Resetting the password is the case de uso's documented unlock path for
     // an account blocked by failed login attempts.
-    await this.prisma.profile.updateMany({
+    await this.prisma.colaborador.updateMany({
       where: { email },
-      data: { failedAttempts: 0 },
+      data: { intentosFallidos: 0 },
     });
 
     return { ok: true };

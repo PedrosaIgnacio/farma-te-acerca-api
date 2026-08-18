@@ -10,144 +10,209 @@ datasource db {
   provider = "postgresql"
 }
 
-// Mirrors the frontend's `Role` union (src/types/index.ts).
-enum Role {
-  collaborator
-  hc
-  dt
-}
-
-// Mirrors the frontend's `Reason` union.
-enum ReasonType {
+// Mirrors the frontend's `Reason` union. NOT in the approved diagram — kept
+// as a deviation because the frontend already depends on it. See
+// DEVIATIONS.md §13.
+enum Motivo {
   Mudanza
   Movilidad
   Estudios
   Otro
+
+  @@map("motivo")
 }
 
-// Mirrors the frontend's `RequestStatus` union. Modeled as an enum rather than
-// the approved diagram's separate `Estados` lookup table — see DEVIATIONS.md.
-enum RequestStatus {
-  Activa
-  EnCurso   @map("En curso")
-  Cancelada
-  Finalizada
+// Mirrors the diagram's `Roles`. Fixed closed set (collaborator/hc/dt);
+// type-safety comes from the hand-written `Role` union in
+// src/auth/types.ts, resolved against this table by `nombre` (unique) via
+// Prisma relation filters/`connect` — no id caching layer. See DEVIATIONS.md.
+model Rol {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  colaboradores Colaborador[]
+
+  @@map("roles")
 }
 
-// Replaces the diagram's `Colaborador` table minus `username`/`Pass`: Supabase
-// Auth (`auth.users`) owns credentials, `id` here is set to the matching
-// `auth.users.id` by AuthService on first login/provisioning. See DEVIATIONS.md.
-model Profile {
-  id             String    @id @default(uuid())
-  legajo         String    @unique
-  fullName       String
-  role           Role
-  email          String    @unique
-  phone          String?
-  active         Boolean   @default(true)
+// Mirrors the diagram's `Estados_Solicitud`. Same rationale as `Rol`.
+// Storing the human label directly in `nombre` (e.g. "En curso") is possible
+// now that this isn't a Postgres enum identifier — the old
+// toStatusLabel/fromStatusLabel translation layer in status.util.ts is gone.
+model EstadoSolicitud {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  cambios             CambioEstadoSolicitud[]
+  solicitudesEnEstado Solicitud[]
+
+  @@map("estados_solicitud")
+}
+
+// Mirrors the diagram's `Regiones`. Seeded with Argentina's official
+// regions plus "Internacional" (a deviation — see DEVIATIONS.md §11) for the
+// one non-Argentine demo sucursal (Montevideo).
+model Region {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+
+  provincias Provincia[]
+
+  @@map("regiones")
+}
+
+// Mirrors the diagram's `Provincias`. Shared by Sucursal and ColabDomicilio
+// — one hierarchy for both, replacing the free-string region/zona/provincia
+// fields each used to carry independently. See DEVIATIONS.md §11.
+model Provincia {
+  id       Int    @id @default(autoincrement())
+  nombre   String @unique
+  regionId Int    @map("id_region")
+  region   Region @relation(fields: [regionId], references: [id])
+
+  sucursales Sucursal[]
+  domicilios ColabDomicilio[]
+
+  @@map("provincias")
+}
+
+// Replaces the diagram's `Colaboradores` minus username/Pass: Supabase Auth
+// (`auth.users`) owns credentials, `id` here is set to the matching
+// `auth.users.id` by AuthService on first login/provisioning. See
+// DEVIATIONS.md §1. `id` stays a UUID (not the diagram's placeholder "PK"
+// type) — unrelated to the rest of this migration.
+model Colaborador {
+  id                 String   @id @default(uuid())
+  legajo             String   @unique
+  nombre             String
+  email              String   @unique
+  telefono           String?
+  activo             Boolean  @default(true)
   // Implements the "block after 5 failed attempts" requirement, which
   // Supabase Auth does not enforce on its own. Reset to 0 whenever the
-  // colaborador successfully resets their password (the case de uso's only
-  // documented unlock path — there's no auto-expiry).
-  failedAttempts Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  // colaborador successfully resets their password.
+  intentosFallidos   Int      @default(0) @map("intentos_fallidos")
+  fechaCreacion      DateTime @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime @updatedAt @map("fecha_actualizacion")
+  rolId              Int      @map("id_rol")
+  rol                Rol      @relation(fields: [rolId], references: [id])
 
-  sucursales    ColaboradorSucursal[]
-  solicitudes   Solicitud[]
-  estadoEventos SolicitudEstado[]
-  domicilio     Domicilio?
+  sucursales  ColabSucursal[]
+  solicitudes Solicitud[]
+  domicilio   ColabDomicilio?
 
-  @@map("profiles")
+  @@map("colaboradores")
 }
 
-// Mirrors the diagram's `Sucursales` table; also serves the frontend's
-// `Branch` shape (`id`, `name`/`nombre`, `region`, `zone`/`zona`). `lat`/`lng`
-// power DT's real-geodistance "colaboradores cercanos" query.
+// Mirrors the diagram's `Sucursales`; also serves the frontend's `Branch`
+// shape (`id`, `name`/`nombre`). `region`/`zona` (free strings) are gone —
+// replaced by the normalized Región→Provincia hierarchy below (`zona` has
+// no equivalent in the new diagram and is dropped as a concept). `lat`/`lng`
+// power DT's real-geodistance "colaboradores cercanos" query. See
+// DEVIATIONS.md §11.
 model Sucursal {
-  id     Int     @id @default(autoincrement())
-  nombre String  @unique
-  region String
-  zona   String
-  activa Boolean @default(true)
-  lat    Float?
-  lng    Float?
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique
+  provinciaId Int       @map("id_provincia")
+  provincia   Provincia @relation(fields: [provinciaId], references: [id])
+  activa      Boolean   @default(true)
+  lat         Float?
+  lng         Float?
 
-  colaboradores       ColaboradorSucursal[]
-  solicitudesActuales  Solicitud[] @relation("SolicitudSucursalActual")
-  solicitudesDeseadas  Solicitud[] @relation("SolicitudSucursalDeseada")
+  colaboradores       ColabSucursal[]
+  solicitudesActuales Solicitud[] @relation("SolicitudSucursalActual")
+  solicitudesDeseadas Solicitud[] @relation("SolicitudSucursalDeseada")
 
   @@map("sucursales")
 }
 
-// Mirrors the diagram's `colab_domicilio`, simplified: only what's needed to
-// compute distance to a sucursal (see DtService.findNearby) plus enough
-// fields to display a human-readable address. 1:1 with Profile, populated
-// manually (seed/Prisma Studio) — no CRUD endpoint, same boundary as
-// Sucursal/Profile (real data comes from Farmacity's HR feed, out of scope).
-model Domicilio {
-  id          Int      @id @default(autoincrement())
-  colabId     String   @unique
-  colaborador Profile  @relation(fields: [colabId], references: [id])
+// Mirrors the diagram's `Colab_Domicilios`, simplified: only what's needed
+// to compute distance to a sucursal (see DtService.findNearby) plus enough
+// fields to display a human-readable address. 1:1 with Colaborador, using
+// `id_colab` itself as PK (matches the diagram exactly — no surrogate id,
+// unlike ColabSucursal below). `localidad` is NOT in the diagram (which only
+// has calle/id_provincia/lat/lng) — kept as a display-only deviation, see
+// DEVIATIONS.md §12. Populated manually (seed/Prisma Studio) — no CRUD
+// endpoint, same boundary as Sucursal/Colaborador.
+model ColabDomicilio {
+  colabId     String      @id @map("id_colab")
+  colaborador Colaborador @relation(fields: [colabId], references: [id])
   calle       String?
   localidad   String?
-  provincia   String?
+  provinciaId Int         @map("id_provincia")
+  provincia   Provincia   @relation(fields: [provinciaId], references: [id])
   lat         Float
   lng         Float
 
-  @@map("domicilios")
+  @@map("colab_domicilios")
 }
 
-// Mirrors the diagram's `Colab_sucursal`: assignment history. The row with
-// `activo = true` for a given colaborador is their current branch.
-model ColaboradorSucursal {
-  id          Int      @id @default(autoincrement())
-  colabId     String
-  colaborador Profile  @relation(fields: [colabId], references: [id])
-  sucursalId  Int
-  sucursal    Sucursal @relation(fields: [sucursalId], references: [id])
-  fecha       DateTime @default(now())
-  activo      Boolean  @default(true)
+// Mirrors the diagram's `Colab_Sucursales`: assignment history. Keeps its
+// own surrogate `id` PK instead of the diagram's composite PK
+// (id_colab, id_sucursal) — intentional deviation so a colaborador can be
+// reassigned to the same sucursal twice at different points in time. The
+// row with `activo = true` for a given colaborador is their current branch.
+// See DEVIATIONS.md §10.
+model ColabSucursal {
+  id          Int         @id @default(autoincrement())
+  colabId     String      @map("id_colab")
+  colaborador Colaborador @relation(fields: [colabId], references: [id])
+  sucursalId  Int         @map("id_sucursal")
+  sucursal    Sucursal    @relation(fields: [sucursalId], references: [id])
+  fecha       DateTime    @default(now())
+  activo      Boolean     @default(true)
 
   @@index([colabId, activo])
-  @@map("colaborador_sucursal")
+  @@map("colab_sucursales")
 }
 
-// Mirrors the diagram's `Solicitudes`. `estado` is denormalized from the
-// latest `SolicitudEstado` row for fast filtering (HC's "por sucursal" query
-// and the analytics aggregates read this field directly).
+// Mirrors the diagram's `Solicitudes`. `motivo`/`otroMotivo` are NOT in the
+// diagram but are kept because the frontend already depends on them (see
+// DEVIATIONS.md §13). `estadoActualId` is NOT in the diagram either: it
+// denormalizes the `CambioEstadoSolicitud` row with `fechaFin = null` for
+// fast filtering (HC's "por sucursal" query and the analytics aggregates
+// read this directly instead of a correlated subquery per row). Any code
+// that transitions a solicitud's estado MUST, in one transaction:
+// 1) close the currently-open `CambioEstadoSolicitud` row (`fechaFin = now()`),
+// 2) insert a new one (`fechaInicio = now()`, `fechaFin = null`),
+// 3) update this field to match. See DEVIATIONS.md §9.
 model Solicitud {
-  id                Int           @id @default(autoincrement())
-  colabId           String
-  colaborador       Profile       @relation(fields: [colabId], references: [id])
-  sucursalActualId  Int
-  sucursalActual    Sucursal      @relation("SolicitudSucursalActual", fields: [sucursalActualId], references: [id])
-  sucursalDeseadaId Int
-  sucursalDeseada   Sucursal      @relation("SolicitudSucursalDeseada", fields: [sucursalDeseadaId], references: [id])
-  reason            ReasonType
-  otherReason       String?
-  description       String?
-  fecha             DateTime      @default(now())
-  estado            RequestStatus @default(Activa)
+  id                Int             @id @default(autoincrement())
+  colabId           String          @map("id_colab")
+  colaborador       Colaborador     @relation(fields: [colabId], references: [id])
+  sucursalActualId  Int             @map("sucursal_actual")
+  sucursalActual    Sucursal        @relation("SolicitudSucursalActual", fields: [sucursalActualId], references: [id])
+  sucursalDeseadaId Int             @map("sucursal_deseada")
+  sucursalDeseada   Sucursal        @relation("SolicitudSucursalDeseada", fields: [sucursalDeseadaId], references: [id])
+  motivo            Motivo
+  otroMotivo        String?         @map("otro_motivo")
+  descripcion       String?
+  fechaCreacion     DateTime        @default(now()) @map("fecha_creacion")
+  estadoActualId    Int             @map("id_estado_actual")
+  estadoActual      EstadoSolicitud @relation(fields: [estadoActualId], references: [id])
 
-  historial SolicitudEstado[]
+  historial CambioEstadoSolicitud[]
 
-  @@index([sucursalDeseadaId, estado])
+  @@index([sucursalDeseadaId, estadoActualId])
   @@index([colabId])
   @@map("solicitudes")
 }
 
-// Mirrors the diagram's `Solicitud_estado`: append-only audit trail of every
-// state transition a solicitud goes through.
-model SolicitudEstado {
-  id          Int           @id @default(autoincrement())
-  solicitudId Int
-  solicitud   Solicitud     @relation(fields: [solicitudId], references: [id])
-  colabId     String
-  colaborador Profile       @relation(fields: [colabId], references: [id])
-  estado      RequestStatus
-  fecha       DateTime      @default(now())
+// Mirrors the diagram's `Cambio_Estado_Solicitud`: append-only audit trail
+// of every state transition, modeled as intervals per the diagram —
+// `fechaFin = null` means "currently in this estado". Unlike today's
+// `SolicitudEstado`, this no longer records which colaborador made the
+// change (matches the diagram literally) — that data is lost on purpose.
+// See DEVIATIONS.md §8.
+model CambioEstadoSolicitud {
+  id          Int             @id @default(autoincrement())
+  solicitudId Int             @map("id_solicitud")
+  solicitud   Solicitud       @relation(fields: [solicitudId], references: [id])
+  estadoId    Int             @map("id_estado_solicitud")
+  estado      EstadoSolicitud @relation(fields: [estadoId], references: [id])
+  fechaInicio DateTime        @default(now()) @map("fecha_inicio")
+  fechaFin    DateTime?       @map("fecha_fin")
 
   @@index([solicitudId])
-  @@map("solicitud_estado")
+  @@map("cambio_estado_solicitud")
 }

@@ -12,11 +12,6 @@ export class AnalyticsQueryDto {
   @IsString()
   region?: string;
 
-  @ApiProperty({ required: false, description: 'Zona de la sucursal deseada.' })
-  @IsOptional()
-  @IsString()
-  zona?: string;
-
   @ApiProperty({ required: false })
   @IsOptional()
   @Type(() => Number)

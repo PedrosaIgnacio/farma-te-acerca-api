@@ -1,20 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, RequestStatus } from '../../generated/prisma';
+import { Prisma } from '../../generated/prisma';
 import {
-  formatDateEsAr,
-  fromStatusLabel,
+  EstadoNombre,
   STATUS_COLOR,
-  toStatusLabel,
+  STATUS_ORDER,
+  formatDateEsAr,
 } from '../common/status.util';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
-
-const STATUS_ORDER: RequestStatus[] = [
-  'Activa',
-  'EnCurso',
-  'Finalizada',
-  'Cancelada',
-];
 
 @Injectable()
 export class HcService {
@@ -23,24 +16,25 @@ export class HcService {
   async findRequestsByDesiredBranch(desiredBranchId: number) {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { sucursalDeseadaId: desiredBranchId },
-      orderBy: { fecha: 'desc' },
+      orderBy: { fechaCreacion: 'desc' },
       include: {
         colaborador: true,
         sucursalActual: true,
         sucursalDeseada: true,
+        estadoActual: true,
       },
     });
 
     // Shape matches the frontend's `HCRequest` type (src/types/index.ts).
     return solicitudes.map((solicitud) => ({
       id: solicitud.id,
-      collaborator: solicitud.colaborador.fullName,
+      collaborator: solicitud.colaborador.nombre,
       employeeId: solicitud.colaborador.legajo,
       currentBranch: solicitud.sucursalActual.nombre,
       desiredBranch: solicitud.sucursalDeseada.nombre,
-      reason: solicitud.reason,
-      date: formatDateEsAr(solicitud.fecha),
-      status: toStatusLabel(solicitud.estado),
+      reason: solicitud.motivo,
+      date: formatDateEsAr(solicitud.fechaCreacion),
+      status: solicitud.estadoActual.nombre,
       email: solicitud.colaborador.email,
     }));
   }
@@ -48,31 +42,41 @@ export class HcService {
   async getAnalytics(filters: AnalyticsQueryDto) {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: this.buildWhere(filters),
-      select: { estado: true, sucursalDeseada: { select: { region: true } } },
+      select: {
+        estadoActual: { select: { nombre: true } },
+        sucursalDeseada: {
+          select: {
+            provincia: { select: { region: { select: { nombre: true } } } },
+          },
+        },
+      },
     });
 
     const total = solicitudes.length;
-    const activas = solicitudes.filter((s) => s.estado === 'Activa').length;
+    const activas = solicitudes.filter(
+      (s) => s.estadoActual.nombre === 'Activa',
+    ).length;
     const exitosas = solicitudes.filter(
-      (s) => s.estado === 'Finalizada',
+      (s) => s.estadoActual.nombre === 'Finalizada',
     ).length;
     const successRate = total === 0 ? 0 : Math.round((exitosas / total) * 100);
 
     const byRegion = new Map<string, number>();
     for (const s of solicitudes) {
-      const region = s.sucursalDeseada.region;
+      const region = s.sucursalDeseada.provincia.region.nombre;
       byRegion.set(region, (byRegion.get(region) ?? 0) + 1);
     }
     const regionData = [...byRegion.entries()]
       .map(([region, requests]) => ({ region, requests }))
       .sort((a, b) => b.requests - a.requests);
 
-    const byStatus = new Map<RequestStatus, number>();
+    const byStatus = new Map<EstadoNombre, number>();
     for (const s of solicitudes) {
-      byStatus.set(s.estado, (byStatus.get(s.estado) ?? 0) + 1);
+      const estado = s.estadoActual.nombre as EstadoNombre;
+      byStatus.set(estado, (byStatus.get(estado) ?? 0) + 1);
     }
     const statusData = STATUS_ORDER.map((estado) => ({
-      name: toStatusLabel(estado),
+      name: estado,
       value: byStatus.get(estado) ?? 0,
       color: STATUS_COLOR[estado],
     }));
@@ -92,11 +96,12 @@ export class HcService {
   async exportCsv(filters: AnalyticsQueryDto): Promise<string> {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: this.buildWhere(filters),
-      orderBy: { fecha: 'desc' },
+      orderBy: { fechaCreacion: 'desc' },
       include: {
         colaborador: true,
         sucursalActual: true,
         sucursalDeseada: true,
+        estadoActual: true,
       },
     });
 
@@ -114,13 +119,13 @@ export class HcService {
     const rows = solicitudes.map((solicitud) =>
       [
         solicitud.id,
-        solicitud.colaborador.fullName,
+        solicitud.colaborador.nombre,
         solicitud.colaborador.legajo,
         solicitud.sucursalActual.nombre,
         solicitud.sucursalDeseada.nombre,
-        solicitud.reason,
-        formatDateEsAr(solicitud.fecha),
-        toStatusLabel(solicitud.estado),
+        solicitud.motivo,
+        formatDateEsAr(solicitud.fechaCreacion),
+        solicitud.estadoActual.nombre,
         solicitud.colaborador.email,
       ]
         .map(csvEscape)
@@ -136,16 +141,15 @@ export class HcService {
       where.sucursalDeseadaId = filters.desiredBranchId;
     }
     if (filters.estado) {
-      where.estado = fromStatusLabel(filters.estado);
+      where.estadoActual = { nombre: filters.estado };
     }
-    if (filters.region || filters.zona) {
+    if (filters.region) {
       where.sucursalDeseada = {
-        ...(filters.region ? { region: filters.region } : {}),
-        ...(filters.zona ? { zona: filters.zona } : {}),
+        provincia: { region: { nombre: filters.region } },
       };
     }
     if (filters.from || filters.to) {
-      where.fecha = {
+      where.fechaCreacion = {
         ...(filters.from ? { gte: new Date(filters.from) } : {}),
         ...(filters.to ? { lte: new Date(filters.to) } : {}),
       };

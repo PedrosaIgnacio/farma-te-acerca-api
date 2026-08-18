@@ -4,11 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { RequestStatus } from '../../generated/prisma';
-import { formatDateEsAr, toStatusLabel } from '../common/status.util';
+import { OPEN_STATUSES, formatDateEsAr } from '../common/status.util';
 import { CreateRequestDto } from './dto/create-request.dto';
-
-const OPEN_STATUSES: RequestStatus[] = ['Activa', 'EnCurso'];
 
 @Injectable()
 export class RequestsService {
@@ -27,53 +24,58 @@ export class RequestsService {
       where: {
         colabId,
         sucursalDeseadaId: dto.desiredBranchId,
-        estado: { in: OPEN_STATUSES },
+        estadoActual: { nombre: { in: OPEN_STATUSES } },
       },
+      include: { estadoActual: true },
     });
     if (existing) {
       throw new ConflictException({
-        message: `Ya tenés una solicitud ${toStatusLabel(existing.estado)} a esta sucursal (N° ${existing.id}). No es posible duplicarla.`,
+        message: `Ya tenés una solicitud ${existing.estadoActual.nombre} a esta sucursal (N° ${existing.id}). No es posible duplicarla.`,
         existingRequestId: existing.id,
-        existingStatus: toStatusLabel(existing.estado),
+        existingStatus: existing.estadoActual.nombre,
       });
     }
+
+    const estadoActivo = await this.prisma.estadoSolicitud.findUniqueOrThrow({
+      where: { nombre: 'Activa' },
+    });
 
     const solicitud = await this.prisma.solicitud.create({
       data: {
         colabId,
         sucursalActualId: dto.currentBranchId,
         sucursalDeseadaId: dto.desiredBranchId,
-        reason: dto.reason,
-        otherReason: dto.reason === 'Otro' ? dto.otherReason : null,
-        description: dto.description,
-        estado: 'Activa',
+        motivo: dto.reason,
+        otroMotivo: dto.reason === 'Otro' ? dto.otherReason : null,
+        descripcion: dto.description,
+        estadoActualId: estadoActivo.id,
         historial: {
-          create: { colabId, estado: 'Activa' },
+          create: { estadoId: estadoActivo.id },
         },
       },
-      include: { sucursalDeseada: true },
+      include: { sucursalDeseada: true, estadoActual: true },
     });
 
     return {
       id: solicitud.id,
       branch: solicitud.sucursalDeseada.nombre,
-      date: formatDateEsAr(solicitud.fecha),
-      status: toStatusLabel(solicitud.estado),
+      date: formatDateEsAr(solicitud.fechaCreacion),
+      status: solicitud.estadoActual.nombre,
     };
   }
 
   async findMyHistory(colabId: string) {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { colabId },
-      orderBy: { fecha: 'desc' },
-      include: { sucursalDeseada: true },
+      orderBy: { fechaCreacion: 'desc' },
+      include: { sucursalDeseada: true, estadoActual: true },
     });
 
     return solicitudes.map((solicitud) => ({
       id: solicitud.id,
       branch: solicitud.sucursalDeseada.nombre,
-      date: formatDateEsAr(solicitud.fecha),
-      status: toStatusLabel(solicitud.estado),
+      date: formatDateEsAr(solicitud.fechaCreacion),
+      status: solicitud.estadoActual.nombre,
     }));
   }
 }

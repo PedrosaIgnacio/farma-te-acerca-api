@@ -3,51 +3,71 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { createClient } from '@supabase/supabase-js';
 import { PrismaClient } from '../generated/prisma';
 
+// Argentina's official regions, plus "Internacional" (id 7 — a deviation,
+// not part of the official list, added only to cover the one non-Argentine
+// demo sucursal below). Ids match exactly what the thesis director provided.
+// See DEVIATIONS.md §11.
+const REGIONES = [
+  { id: 1, nombre: 'Nuevo Cuyo' },
+  { id: 2, nombre: 'Centro / Pampeana' },
+  { id: 3, nombre: 'Noroeste (NOA)' },
+  { id: 4, nombre: 'Nordeste (NEA)' },
+  { id: 5, nombre: 'Patagonia' },
+  { id: 6, nombre: 'CABA' },
+  { id: 7, nombre: 'Internacional' },
+] as const;
+
+// Argentina's 24 provincias (ids/region assignment as provided), plus
+// "Montevideo" (id 25, region "Internacional") for the one demo sucursal
+// outside Argentina. See DEVIATIONS.md §11.
+const PROVINCIAS = [
+  { id: 1, nombre: 'Buenos Aires', regionId: 2 },
+  { id: 2, nombre: 'Catamarca', regionId: 3 },
+  { id: 3, nombre: 'Chaco', regionId: 4 },
+  { id: 4, nombre: 'Chubut', regionId: 5 },
+  { id: 5, nombre: 'Córdoba', regionId: 2 },
+  { id: 6, nombre: 'Corrientes', regionId: 4 },
+  { id: 7, nombre: 'Entre Ríos', regionId: 2 },
+  { id: 8, nombre: 'Formosa', regionId: 4 },
+  { id: 9, nombre: 'Jujuy', regionId: 3 },
+  { id: 10, nombre: 'La Pampa', regionId: 2 },
+  { id: 11, nombre: 'La Rioja', regionId: 1 },
+  { id: 12, nombre: 'Mendoza', regionId: 1 },
+  { id: 13, nombre: 'Misiones', regionId: 4 },
+  { id: 14, nombre: 'Neuquén', regionId: 5 },
+  { id: 15, nombre: 'Río Negro', regionId: 5 },
+  { id: 16, nombre: 'Salta', regionId: 3 },
+  { id: 17, nombre: 'San Juan', regionId: 1 },
+  { id: 18, nombre: 'San Luis', regionId: 1 },
+  { id: 19, nombre: 'Santa Cruz', regionId: 5 },
+  { id: 20, nombre: 'Santa Fe', regionId: 2 },
+  { id: 21, nombre: 'Santiago del Estero', regionId: 3 },
+  { id: 22, nombre: 'Tierra del Fuego', regionId: 5 },
+  { id: 23, nombre: 'Tucumán', regionId: 3 },
+  { id: 24, nombre: 'Ciudad Autónoma de Buenos Aires', regionId: 6 },
+  { id: 25, nombre: 'Montevideo', regionId: 7 },
+] as const;
+
+const ROLES = ['collaborator', 'hc', 'dt'] as const;
+
+const ESTADOS = ['Activa', 'En curso', 'Cancelada', 'Finalizada'] as const;
+
 // Same 8 branches the frontend already ships in src/data/mockData.ts
-// (BRANCHES) — keeping ids/names/regions/zones aligned means the frontend's
-// existing branch strings still resolve once it's wired to this API.
+// (BRANCHES) — keeping ids/names aligned means the frontend's existing
+// branch strings still resolve once it's wired to this API. `provincia`
+// replaces the old free-string `region`/`zona` pair — see DEVIATIONS.md §11.
 // lat/lng are approximate neighborhood centroids (manually sourced, per the
 // "manual entry, no geocoding service" decision) — replace with the exact
 // store addresses when those are available.
 const BRANCHES = [
-  { nombre: 'Farmacity Palermo', region: 'CABA', zona: 'Norte', lat: -34.5875, lng: -58.4205 },
-  { nombre: 'Farmacity Belgrano', region: 'CABA', zona: 'Norte', lat: -34.5633, lng: -58.456 },
-  {
-    nombre: 'Farmacity Rosario Centro',
-    region: 'Santa Fe',
-    zona: 'Centro',
-    lat: -32.9468,
-    lng: -60.6393,
-  },
-  {
-    nombre: 'Farmacity Córdoba Nueva Córdoba',
-    region: 'Córdoba',
-    zona: 'Centro',
-    lat: -31.4327,
-    lng: -64.1926,
-  },
-  {
-    nombre: 'Farmacity Mendoza Centro',
-    region: 'Mendoza',
-    zona: 'Cuyo',
-    lat: -32.8908,
-    lng: -68.8272,
-  },
-  { nombre: 'Farmacity Salta Centro', region: 'Salta', zona: 'NOA', lat: -24.7859, lng: -65.4117 },
-  {
-    nombre: 'Farmacity Montevideo Pocitos',
-    region: 'Uruguay',
-    zona: 'Uruguay',
-    lat: -34.9106,
-    lng: -56.1548,
-  },
-  {
-    nombre: 'Farmacity Mar del Plata',
-    region: 'Buenos Aires',
-    zona: 'Costa',
-    lat: -38.0055,
-    lng: -57.5426,
-  },
+  { nombre: 'Farmacity Palermo', provincia: 'Ciudad Autónoma de Buenos Aires', lat: -34.5875, lng: -58.4205 },
+  { nombre: 'Farmacity Belgrano', provincia: 'Ciudad Autónoma de Buenos Aires', lat: -34.5633, lng: -58.456 },
+  { nombre: 'Farmacity Rosario Centro', provincia: 'Santa Fe', lat: -32.9468, lng: -60.6393 },
+  { nombre: 'Farmacity Córdoba Nueva Córdoba', provincia: 'Córdoba', lat: -31.4327, lng: -64.1926 },
+  { nombre: 'Farmacity Mendoza Centro', provincia: 'Mendoza', lat: -32.8908, lng: -68.8272 },
+  { nombre: 'Farmacity Salta Centro', provincia: 'Salta', lat: -24.7859, lng: -65.4117 },
+  { nombre: 'Farmacity Montevideo Pocitos', provincia: 'Montevideo', lat: -34.9106, lng: -56.1548 },
+  { nombre: 'Farmacity Mar del Plata', provincia: 'Buenos Aires', lat: -38.0055, lng: -57.5426 },
 ] as const;
 
 // Local/demo-only accounts so there's something to log in with and click
@@ -57,10 +77,10 @@ const BRANCHES = [
 const DEMO_PASSWORD = 'Demo1234!';
 // `domicilio` (a few km from the assigned branch, for a believable DT
 // "colaboradores cercanos" demo) is only set for `collaborator`-role
-// accounts — matches DtService.findNearby's `role: 'collaborator'` filter,
-// since HC/DT accounts shouldn't show up as contingency coverage candidates.
-// calle/localidad/provincia were reverse-geocoded once from lat/lng via
-// Nominatim (OpenStreetMap) and hardcoded here so the seed stays
+// accounts — matches DtService.findNearby's `rol: { nombre: 'collaborator' }`
+// filter, since HC/DT accounts shouldn't show up as contingency coverage
+// candidates. calle/localidad/provincia were reverse-geocoded once from
+// lat/lng via Nominatim (OpenStreetMap) and hardcoded here so the seed stays
 // self-contained — no geocoding call happens at seed time.
 const DEMO_PROFILES = [
   {
@@ -412,22 +432,22 @@ const DEMO_PROFILES = [
 const SOLICITUDES_DEMO = [
   { legajo: '10001', sucursalDeseada: 'Farmacity Mar del Plata', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 60 },
   { legajo: '10004', sucursalDeseada: 'Farmacity Palermo', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 5 },
-  { legajo: '10005', sucursalDeseada: 'Farmacity Córdoba Nueva Córdoba', reason: 'Estudios' as const, otherReason: undefined, estado: 'EnCurso' as const, daysAgo: 15 },
+  { legajo: '10005', sucursalDeseada: 'Farmacity Córdoba Nueva Córdoba', reason: 'Estudios' as const, otherReason: undefined, estado: 'En curso' as const, daysAgo: 15 },
   { legajo: '10006', sucursalDeseada: 'Farmacity Belgrano', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Cancelada' as const, daysAgo: 40 },
   { legajo: '10007', sucursalDeseada: 'Farmacity Mendoza Centro', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 3 },
-  { legajo: '10008', sucursalDeseada: 'Farmacity Salta Centro', reason: 'Otro' as const, otherReason: 'Cuidado familiar', estado: 'EnCurso' as const, daysAgo: 20 },
+  { legajo: '10008', sucursalDeseada: 'Farmacity Salta Centro', reason: 'Otro' as const, otherReason: 'Cuidado familiar', estado: 'En curso' as const, daysAgo: 20 },
   { legajo: '10009', sucursalDeseada: 'Farmacity Palermo', reason: 'Estudios' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 90 },
   { legajo: '10010', sucursalDeseada: 'Farmacity Mar del Plata', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 2 },
   { legajo: '10011', sucursalDeseada: 'Farmacity Belgrano', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Cancelada' as const, daysAgo: 35 },
-  { legajo: '10012', sucursalDeseada: 'Farmacity Mendoza Centro', reason: 'Estudios' as const, otherReason: undefined, estado: 'EnCurso' as const, daysAgo: 10 },
+  { legajo: '10012', sucursalDeseada: 'Farmacity Mendoza Centro', reason: 'Estudios' as const, otherReason: undefined, estado: 'En curso' as const, daysAgo: 10 },
   { legajo: '10013', sucursalDeseada: 'Farmacity Salta Centro', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 70 },
   { legajo: '10014', sucursalDeseada: 'Farmacity Rosario Centro', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 8 },
   { legajo: '10015', sucursalDeseada: 'Farmacity Córdoba Nueva Córdoba', reason: 'Otro' as const, otherReason: 'Reagrupamiento familiar', estado: 'Cancelada' as const, daysAgo: 25 },
   { legajo: '10016', sucursalDeseada: 'Farmacity Salta Centro', reason: 'Estudios' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 1 },
-  { legajo: '10017', sucursalDeseada: 'Farmacity Mendoza Centro', reason: 'Movilidad' as const, otherReason: undefined, estado: 'EnCurso' as const, daysAgo: 12 },
+  { legajo: '10017', sucursalDeseada: 'Farmacity Mendoza Centro', reason: 'Movilidad' as const, otherReason: undefined, estado: 'En curso' as const, daysAgo: 12 },
   { legajo: '10018', sucursalDeseada: 'Farmacity Córdoba Nueva Córdoba', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 100 },
   { legajo: '10019', sucursalDeseada: 'Farmacity Mar del Plata', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Activa' as const, daysAgo: 4 },
-  { legajo: '10020', sucursalDeseada: 'Farmacity Palermo', reason: 'Estudios' as const, otherReason: undefined, estado: 'EnCurso' as const, daysAgo: 18 },
+  { legajo: '10020', sucursalDeseada: 'Farmacity Palermo', reason: 'Estudios' as const, otherReason: undefined, estado: 'En curso' as const, daysAgo: 18 },
   { legajo: '10021', sucursalDeseada: 'Farmacity Montevideo Pocitos', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 50 },
   { legajo: '10022', sucursalDeseada: 'Farmacity Rosario Centro', reason: 'Otro' as const, otherReason: 'Motivos personales', estado: 'Cancelada' as const, daysAgo: 30 },
 ] as const;
@@ -436,11 +456,54 @@ async function main() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter });
 
+  for (const region of REGIONES) {
+    await prisma.region.upsert({
+      where: { id: region.id },
+      update: { nombre: region.nombre },
+      create: { id: region.id, nombre: region.nombre },
+    });
+  }
+  console.log(`Seeded ${REGIONES.length} regiones.`);
+
+  for (const provincia of PROVINCIAS) {
+    await prisma.provincia.upsert({
+      where: { id: provincia.id },
+      update: { nombre: provincia.nombre, regionId: provincia.regionId },
+      create: { id: provincia.id, nombre: provincia.nombre, regionId: provincia.regionId },
+    });
+  }
+  console.log(`Seeded ${PROVINCIAS.length} provincias.`);
+
+  for (const nombre of ROLES) {
+    await prisma.rol.upsert({ where: { nombre }, update: {}, create: { nombre } });
+  }
+  console.log(`Seeded ${ROLES.length} roles.`);
+
+  const estadoIdByNombre = new Map<string, number>();
+  for (const nombre of ESTADOS) {
+    const estado = await prisma.estadoSolicitud.upsert({
+      where: { nombre },
+      update: {},
+      create: { nombre },
+    });
+    estadoIdByNombre.set(nombre, estado.id);
+  }
+  console.log(`Seeded ${ESTADOS.length} estados.`);
+
   for (const branch of BRANCHES) {
     await prisma.sucursal.upsert({
       where: { nombre: branch.nombre },
-      update: { region: branch.region, zona: branch.zona, lat: branch.lat, lng: branch.lng },
-      create: branch,
+      update: {
+        provincia: { connect: { nombre: branch.provincia } },
+        lat: branch.lat,
+        lng: branch.lng,
+      },
+      create: {
+        nombre: branch.nombre,
+        provincia: { connect: { nombre: branch.provincia } },
+        lat: branch.lat,
+        lng: branch.lng,
+      },
     });
   }
   console.log(`Seeded ${BRANCHES.length} sucursales.`);
@@ -489,32 +552,49 @@ async function main() {
     const authUserId = await getOrCreateAuthUser(demo.email, DEMO_PASSWORD);
     const branch = await prisma.sucursal.findUniqueOrThrow({ where: { nombre: demo.branch } });
 
-    const profile = await prisma.profile.upsert({
+    const colaborador = await prisma.colaborador.upsert({
       where: { legajo: demo.legajo },
-      update: { fullName: demo.fullName, role: demo.role, email: demo.email },
+      update: {
+        nombre: demo.fullName,
+        rol: { connect: { nombre: demo.role } },
+        email: demo.email,
+      },
       create: {
         id: authUserId,
         legajo: demo.legajo,
-        fullName: demo.fullName,
-        role: demo.role,
+        nombre: demo.fullName,
+        rol: { connect: { nombre: demo.role } },
         email: demo.email,
       },
     });
 
-    const existingAssignment = await prisma.colaboradorSucursal.findFirst({
-      where: { colabId: profile.id, activo: true },
+    const existingAssignment = await prisma.colabSucursal.findFirst({
+      where: { colabId: colaborador.id, activo: true },
     });
     if (!existingAssignment) {
-      await prisma.colaboradorSucursal.create({
-        data: { colabId: profile.id, sucursalId: branch.id, activo: true },
+      await prisma.colabSucursal.create({
+        data: { colabId: colaborador.id, sucursalId: branch.id, activo: true },
       });
     }
 
     if (demo.domicilio) {
-      await prisma.domicilio.upsert({
-        where: { colabId: profile.id },
-        update: demo.domicilio,
-        create: { colabId: profile.id, ...demo.domicilio },
+      await prisma.colabDomicilio.upsert({
+        where: { colabId: colaborador.id },
+        update: {
+          calle: demo.domicilio.calle,
+          localidad: demo.domicilio.localidad,
+          provincia: { connect: { nombre: demo.domicilio.provincia } },
+          lat: demo.domicilio.lat,
+          lng: demo.domicilio.lng,
+        },
+        create: {
+          colaborador: { connect: { id: colaborador.id } },
+          calle: demo.domicilio.calle,
+          localidad: demo.domicilio.localidad,
+          provincia: { connect: { nombre: demo.domicilio.provincia } },
+          lat: demo.domicilio.lat,
+          lng: demo.domicilio.lng,
+        },
       });
     }
   }
@@ -522,8 +602,8 @@ async function main() {
 
   let solicitudesCreated = 0;
   for (const demo of SOLICITUDES_DEMO) {
-    const colaborador = await prisma.profile.findUniqueOrThrow({ where: { legajo: demo.legajo } });
-    const asignacionActual = await prisma.colaboradorSucursal.findFirstOrThrow({
+    const colaborador = await prisma.colaborador.findUniqueOrThrow({ where: { legajo: demo.legajo } });
+    const asignacionActual = await prisma.colabSucursal.findFirstOrThrow({
       where: { colabId: colaborador.id, activo: true },
     });
     const sucursalDeseada = await prisma.sucursal.findUniqueOrThrow({
@@ -536,16 +616,19 @@ async function main() {
     if (yaExiste) continue;
 
     const fecha = new Date(Date.now() - demo.daysAgo * 24 * 60 * 60 * 1000);
+    const estadoId = estadoIdByNombre.get(demo.estado)!;
     await prisma.solicitud.create({
       data: {
         colabId: colaborador.id,
         sucursalActualId: asignacionActual.sucursalId,
         sucursalDeseadaId: sucursalDeseada.id,
-        reason: demo.reason,
-        otherReason: demo.otherReason,
-        fecha,
-        estado: demo.estado,
-        historial: { create: { colabId: colaborador.id, estado: demo.estado, fecha } },
+        motivo: demo.reason,
+        otroMotivo: demo.otherReason,
+        fechaCreacion: fecha,
+        estadoActualId: estadoId,
+        historial: {
+          create: { estadoId, fechaInicio: fecha },
+        },
       },
     });
     solicitudesCreated++;

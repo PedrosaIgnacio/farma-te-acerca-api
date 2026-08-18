@@ -34,22 +34,23 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     // Looked up by email, not by matching ids, so both password-provisioned
-    // and SSO-first Supabase users resolve to the same Profile row.
-    const profile = await this.prisma.profile.findUnique({
+    // and SSO-first Supabase users resolve to the same Colaborador row.
+    const colaborador = await this.prisma.colaborador.findUnique({
       where: { email: data.user.email },
+      include: { rol: true },
     });
-    if (!profile || !profile.active) {
+    if (!colaborador || !colaborador.activo) {
       throw new UnauthorizedException(
         'No hay un colaborador activo asociado a esta cuenta.',
       );
     }
 
     request.user = {
-      id: profile.id,
-      legajo: profile.legajo,
-      fullName: profile.fullName,
-      role: profile.role,
-      email: profile.email,
+      id: colaborador.id,
+      legajo: colaborador.legajo,
+      fullName: colaborador.nombre,
+      role: colaborador.rol.nombre as AuthenticatedUser['role'],
+      email: colaborador.email,
     };
     return true;
   }

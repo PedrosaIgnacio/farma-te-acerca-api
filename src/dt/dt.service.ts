@@ -25,10 +25,10 @@ export class DtService {
     }
     const target = { lat: targetBranch.lat, lng: targetBranch.lng };
 
-    const candidates = await this.prisma.profile.findMany({
+    const candidates = await this.prisma.colaborador.findMany({
       where: {
-        role: 'collaborator',
-        active: true,
+        rol: { nombre: 'collaborator' },
+        activo: true,
         domicilio: { isNot: null },
         sucursales: {
           none: { activo: true, sucursalId: branchId },
@@ -45,9 +45,9 @@ export class DtService {
     });
 
     // Shape matches the frontend's `NearbyEmployee` type (src/types/index.ts).
-    // `id` is a synthetic ordinal — Profile uses a Supabase-managed uuid (see
-    // DEVIATIONS.md) but the frontend type expects a number, and this list is
-    // display-only (no follow-up fetch by id).
+    // `id` is a synthetic ordinal — Colaborador uses a Supabase-managed uuid
+    // (see DEVIATIONS.md) but the frontend type expects a number, and this
+    // list is display-only (no follow-up fetch by id).
     return candidates
       .map((colaborador) => {
         const domicilio = colaborador.domicilio!;
@@ -56,7 +56,7 @@ export class DtService {
           lng: domicilio.lng,
         });
         return {
-          name: colaborador.fullName,
+          name: colaborador.nombre,
           employeeId: colaborador.legajo,
           currentBranch: colaborador.sucursales[0]?.sucursal.nombre ?? '',
           email: colaborador.email,

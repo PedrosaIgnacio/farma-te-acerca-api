@@ -6,7 +6,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { ReasonType } from '../../../generated/prisma';
+import { Motivo } from '../../../generated/prisma';
 
 export class CreateRequestDto {
   @ApiProperty({
@@ -19,9 +19,9 @@ export class CreateRequestDto {
   @IsInt()
   desiredBranchId: number;
 
-  @ApiProperty({ enum: ReasonType })
-  @IsEnum(ReasonType)
-  reason: ReasonType;
+  @ApiProperty({ enum: Motivo })
+  @IsEnum(Motivo)
+  reason: Motivo;
 
   @ApiProperty({ required: false, description: 'Solo cuando reason = "Otro".' })
   @IsOptional()
