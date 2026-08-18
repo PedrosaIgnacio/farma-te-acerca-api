@@ -1,7 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
+  Param,
+  ParseIntPipe,
+  Patch,
   Query,
   StreamableFile,
   UseGuards,
@@ -12,6 +16,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { HcService } from './hc.service';
 
 @ApiTags('hc')
@@ -25,6 +30,14 @@ export class HcController {
   @Get('requests')
   findRequests(@Query() query: HcRequestsQueryDto) {
     return this.hcService.findRequestsByDesiredBranch(query.desiredBranchId);
+  }
+
+  @Patch('requests/:id/status')
+  updateRequestStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRequestStatusDto,
+  ) {
+    return this.hcService.updateRequestStatus(id, dto.status);
   }
 
   @Get('analytics')

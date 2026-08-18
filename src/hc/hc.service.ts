@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma';
 import {
@@ -9,6 +9,17 @@ import {
 } from '../common/status.util';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 
+const HC_REQUEST_INCLUDE = {
+  colaborador: true,
+  sucursalActual: true,
+  sucursalDeseada: true,
+  estadoActual: true,
+} satisfies Prisma.SolicitudInclude;
+
+type SolicitudWithRelations = Prisma.SolicitudGetPayload<{
+  include: typeof HC_REQUEST_INCLUDE;
+}>;
+
 @Injectable()
 export class HcService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,26 +28,51 @@ export class HcService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { sucursalDeseadaId: desiredBranchId },
       orderBy: { fechaCreacion: 'desc' },
-      include: {
-        colaborador: true,
-        sucursalActual: true,
-        sucursalDeseada: true,
-        estadoActual: true,
-      },
+      include: HC_REQUEST_INCLUDE,
     });
 
-    // Shape matches the frontend's `HCRequest` type (src/types/index.ts).
-    return solicitudes.map((solicitud) => ({
-      id: solicitud.id,
-      collaborator: solicitud.colaborador.nombre,
-      employeeId: solicitud.colaborador.legajo,
-      currentBranch: solicitud.sucursalActual.nombre,
-      desiredBranch: solicitud.sucursalDeseada.nombre,
-      reason: solicitud.motivo,
-      date: formatDateEsAr(solicitud.fechaCreacion),
-      status: solicitud.estadoActual.nombre,
-      email: solicitud.colaborador.email,
-    }));
+    return solicitudes.map(toHcRequest);
+  }
+
+  // Transitions a solicitud to a new estado. Per DEVIATIONS.md §9, this must
+  // atomically: 1) close the currently-open CambioEstadoSolicitud interval,
+  // 2) open a new one for the target estado, 3) update the denormalized
+  // Solicitud.estadoActualId cache to match.
+  async updateRequestStatus(id: number, status: EstadoNombre) {
+    const solicitud = await this.prisma.solicitud.findUnique({
+      where: { id },
+      include: HC_REQUEST_INCLUDE,
+    });
+    if (!solicitud) {
+      throw new NotFoundException('Solicitud inexistente.');
+    }
+    if (solicitud.estadoActual.nombre === status) {
+      return toHcRequest(solicitud);
+    }
+
+    const nuevoEstado = await this.prisma.estadoSolicitud.findUniqueOrThrow({
+      where: { nombre: status },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.cambioEstadoSolicitud.updateMany({
+        where: { solicitudId: id, fechaFin: null },
+        data: { fechaFin: new Date() },
+      }),
+      this.prisma.cambioEstadoSolicitud.create({
+        data: { solicitudId: id, estadoId: nuevoEstado.id },
+      }),
+      this.prisma.solicitud.update({
+        where: { id },
+        data: { estadoActualId: nuevoEstado.id },
+      }),
+    ]);
+
+    const updated = await this.prisma.solicitud.findUniqueOrThrow({
+      where: { id },
+      include: HC_REQUEST_INCLUDE,
+    });
+    return toHcRequest(updated);
   }
 
   async getAnalytics(filters: AnalyticsQueryDto) {
@@ -161,4 +197,19 @@ export class HcService {
 function csvEscape(value: string | number): string {
   const str = String(value);
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+// Shape matches the frontend's `HCRequest` type (src/types/index.ts).
+function toHcRequest(solicitud: SolicitudWithRelations) {
+  return {
+    id: solicitud.id,
+    collaborator: solicitud.colaborador.nombre,
+    employeeId: solicitud.colaborador.legajo,
+    currentBranch: solicitud.sucursalActual.nombre,
+    desiredBranch: solicitud.sucursalDeseada.nombre,
+    reason: solicitud.motivo,
+    date: formatDateEsAr(solicitud.fechaCreacion),
+    status: solicitud.estadoActual.nombre,
+    email: solicitud.colaborador.email,
+  };
 }
