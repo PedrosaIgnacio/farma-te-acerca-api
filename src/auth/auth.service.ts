@@ -8,6 +8,7 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AuthenticatedUser } from './types';
 
 const MAX_FAILED_ATTEMPTS = 5;
 
@@ -71,6 +72,24 @@ export class AuthService {
         role: colaborador.rol.nombre,
         email: colaborador.email,
       },
+    };
+  }
+
+  // Current branch isn't part of `AuthenticatedUser` (the guard populates
+  // that on every request; this query only runs for `GET /auth/me`, which
+  // is the one place the frontend needs it — to pre-fill and lock
+  // NewRequestPage's "sucursal actual" select, since a collaborator can't
+  // request a relocation from a branch they don't belong to).
+  async me(user: AuthenticatedUser) {
+    const asignacion = await this.prisma.colabSucursal.findFirst({
+      where: { colabId: user.id, activo: true },
+      include: { sucursal: true },
+    });
+
+    return {
+      ...user,
+      currentBranchId: asignacion?.sucursal.id ?? null,
+      currentBranch: asignacion?.sucursal.nombre ?? null,
     };
   }
 
