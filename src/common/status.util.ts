@@ -8,29 +8,39 @@ import { Prisma } from '../../generated/prisma';
 // anymore.
 export const ESTADO_NOMBRES = [
   'Activa',
+  'Aprobado',
   'En curso',
-  'Cancelada',
   'Finalizada',
+  'No aprobado',
+  'Cancelada',
 ] as const;
 export type EstadoNombre = (typeof ESTADO_NOMBRES)[number];
 
 export const STATUS_LABELS: readonly string[] = ESTADO_NOMBRES;
 
-export const OPEN_STATUSES: EstadoNombre[] = ['Activa', 'En curso'];
+// 'Aprobado' is still pending completion (HC approved the move but it
+// hasn't happened yet) so it counts as open the same as 'Activa'/'En curso'
+// — it still blocks a duplicate request to the same sucursal.
+export const OPEN_STATUSES: EstadoNombre[] = ['Activa', 'Aprobado', 'En curso'];
 
 export const STATUS_ORDER: EstadoNombre[] = [
   'Activa',
+  'Aprobado',
   'En curso',
   'Finalizada',
+  'No aprobado',
   'Cancelada',
 ];
 
-// Matches the frontend's `STATUS_DATA` colors (src/data/mockData.ts) exactly,
-// since the pie chart currently sources color straight from the data layer.
+// Matches the frontend's `STATUS_DOT_COLORS`/`STATUS_STYLES`
+// (src/data/constants.ts) exactly, since the pie chart currently sources
+// color straight from the data layer.
 export const STATUS_COLOR: Record<EstadoNombre, string> = {
   Activa: '#0284C7',
+  Aprobado: '#7C3AED',
   'En curso': '#D97706',
   Finalizada: '#1F7A4D',
+  'No aprobado': '#DC2626',
   Cancelada: '#78716C',
 };
 
@@ -64,4 +74,18 @@ export function formatDateEsAr(date: Date): string {
     year: 'numeric',
     timeZone: 'America/Argentina/Buenos_Aires',
   });
+}
+
+// Same as formatDateEsAr but with hour:minute, for the solicitud's
+// estado-change timeline where the time of day (not just the day) matters.
+// Date and time are formatted separately and joined with " · " (middle dot)
+// instead of the locale's default ", " separator — a frontend design call.
+export function formatDateTimeEsAr(date: Date): string {
+  const datePart = formatDateEsAr(date);
+  const timePart = date.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  });
+  return `${datePart} · ${timePart}`;
 }

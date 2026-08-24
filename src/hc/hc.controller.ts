@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   StreamableFile,
   UseGuards,
@@ -16,6 +17,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { CreateHcRequestDto } from './dto/create-hc-request.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
 import { HcService } from './hc.service';
 
@@ -27,9 +29,19 @@ import { HcService } from './hc.service';
 export class HcController {
   constructor(private readonly hcService: HcService) {}
 
+  @Get('collaborators')
+  findCollaborators() {
+    return this.hcService.findCollaborators();
+  }
+
   @Get('requests')
   findRequests(@Query() query: HcRequestsQueryDto) {
-    return this.hcService.findRequestsByDesiredBranch(query.desiredBranchId);
+    return this.hcService.findRequests(query);
+  }
+
+  @Post('requests')
+  createRequest(@Body() dto: CreateHcRequestDto) {
+    return this.hcService.createRequest(dto);
   }
 
   @Patch('requests/:id/status')

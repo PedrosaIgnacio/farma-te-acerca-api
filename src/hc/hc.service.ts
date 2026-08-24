@@ -9,7 +9,10 @@ import {
   currentEstadoNombre,
   formatDateEsAr,
 } from '../common/status.util';
+import { RequestsService } from '../requests/requests.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import { CreateHcRequestDto } from './dto/create-hc-request.dto';
+import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
 
 const HC_REQUEST_INCLUDE = {
   colaborador: true,
@@ -24,11 +27,42 @@ type SolicitudWithRelations = Prisma.SolicitudGetPayload<{
 
 @Injectable()
 export class HcService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly requestsService: RequestsService,
+  ) {}
 
-  async findRequestsByDesiredBranch(desiredBranchId: number) {
+  // Same role/activo/current-branch shape as DtService.findNearby's
+  // candidate query — mirrors it rather than introducing a different way
+  // to resolve "a colaborador's current branch" a third time.
+  async findCollaborators() {
+    const colaboradores = await this.prisma.colaborador.findMany({
+      where: { rol: { nombre: 'collaborator' }, activo: true },
+      orderBy: { nombre: 'asc' },
+      include: {
+        sucursales: { where: { activo: true }, include: { sucursal: true }, take: 1 },
+      },
+    });
+
+    return colaboradores.map((c) => ({
+      id: c.id,
+      legajo: c.legajo,
+      name: c.nombre,
+      currentBranchId: c.sucursales[0]?.sucursal.id ?? null,
+      currentBranch: c.sucursales[0]?.sucursal.nombre ?? null,
+    }));
+  }
+
+  async createRequest(dto: CreateHcRequestDto) {
+    const { colabId, ...rest } = dto;
+    return this.requestsService.create(colabId, rest);
+  }
+
+  async findRequests(filters: HcRequestsQueryDto) {
     const solicitudes = await this.prisma.solicitud.findMany({
-      where: { sucursalDeseadaId: desiredBranchId },
+      where: filters.desiredBranchId
+        ? { sucursalDeseadaId: filters.desiredBranchId }
+        : undefined,
       orderBy: { fechaCreacion: 'desc' },
       include: HC_REQUEST_INCLUDE,
     });

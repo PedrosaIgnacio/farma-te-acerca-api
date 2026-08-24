@@ -9,6 +9,7 @@ import {
   CURRENT_ESTADO_INCLUDE,
   currentEstadoNombre,
   formatDateEsAr,
+  formatDateTimeEsAr,
 } from '../common/status.util';
 import { CreateRequestDto } from './dto/create-request.dto';
 
@@ -84,5 +85,48 @@ export class RequestsService {
       date: formatDateEsAr(solicitud.fechaCreacion),
       status: currentEstadoNombre(solicitud),
     }));
+  }
+
+  // `where: { id, colabId }` (rather than `findUnique` on id alone) scopes
+  // the lookup to the caller's own solicitudes in one query — a solicitud
+  // belonging to someone else 404s the same as one that doesn't exist, so
+  // this never leaks whether a given id exists to another collaborator.
+  async findOne(colabId: string, id: number) {
+    const solicitud = await this.prisma.solicitud.findFirst({
+      where: { id, colabId },
+      include: {
+        sucursalActual: true,
+        sucursalDeseada: true,
+        historial: {
+          orderBy: { fechaInicio: 'asc' },
+          include: { estado: true },
+        },
+      },
+    });
+    if (!solicitud) {
+      throw new NotFoundException('Solicitud inexistente.');
+    }
+
+    const current = solicitud.historial.find((h) => h.fechaFin === null);
+    if (!current) {
+      throw new Error('Solicitud sin estado vigente (historial vacío).');
+    }
+
+    return {
+      id: solicitud.id,
+      currentBranch: solicitud.sucursalActual.nombre,
+      desiredBranch: solicitud.sucursalDeseada.nombre,
+      reason: solicitud.motivo,
+      otherReason: solicitud.otroMotivo,
+      description: solicitud.descripcion,
+      date: formatDateEsAr(solicitud.fechaCreacion),
+      status: current.estado.nombre,
+      history: solicitud.historial.map((h) => ({
+        status: h.estado.nombre,
+        startDate: formatDateTimeEsAr(h.fechaInicio),
+        endDate: h.fechaFin ? formatDateTimeEsAr(h.fechaFin) : null,
+        motivo: h.motivo,
+      })),
+    };
   }
 }

@@ -50,7 +50,14 @@ const PROVINCIAS = [
 
 const ROLES = ['collaborator', 'hc', 'dt'] as const;
 
-const ESTADOS = ['Activa', 'En curso', 'Cancelada', 'Finalizada'] as const;
+const ESTADOS = [
+  'Activa',
+  'Aprobado',
+  'En curso',
+  'Finalizada',
+  'No aprobado',
+  'Cancelada',
+] as const;
 
 // Same 8 branches the frontend already ships in src/data/mockData.ts
 // (BRANCHES) — keeping ids/names aligned means the frontend's existing
@@ -450,6 +457,8 @@ const SOLICITUDES_DEMO = [
   { legajo: '10020', sucursalDeseada: 'Farmacity Palermo', reason: 'Estudios' as const, otherReason: undefined, estado: 'En curso' as const, daysAgo: 18 },
   { legajo: '10021', sucursalDeseada: 'Farmacity Montevideo Pocitos', reason: 'Mudanza' as const, otherReason: undefined, estado: 'Finalizada' as const, daysAgo: 50 },
   { legajo: '10022', sucursalDeseada: 'Farmacity Rosario Centro', reason: 'Otro' as const, otherReason: 'Motivos personales', estado: 'Cancelada' as const, daysAgo: 30 },
+  { legajo: '10023', sucursalDeseada: 'Farmacity Rosario Centro', reason: 'Movilidad' as const, otherReason: undefined, estado: 'Aprobado' as const, daysAgo: 6 },
+  { legajo: '10025', sucursalDeseada: 'Farmacity Salta Centro', reason: 'Otro' as const, otherReason: 'Cambio de área', estado: 'No aprobado' as const, daysAgo: 22 },
 ] as const;
 
 async function main() {
