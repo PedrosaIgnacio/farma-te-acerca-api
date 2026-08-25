@@ -414,7 +414,13 @@ const DEMO_PROFILES = [
     role: 'collaborator' as const,
     email: 'ignaciopedrosa1998@gmail.com',
     branch: 'Farmacity Palermo',
-    domicilio: null,
+    domicilio: {
+      lat: -34.583,
+      lng: -58.426,
+      calle: 'Avenida Santa Fe 4200',
+      localidad: 'Buenos Aires',
+      provincia: 'Ciudad Autónoma de Buenos Aires',
+    },
   },
   {
     legajo: '10025',

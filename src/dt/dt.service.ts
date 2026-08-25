@@ -60,6 +60,7 @@ export class DtService {
           employeeId: colaborador.legajo,
           currentBranch: colaborador.sucursales[0]?.sucursal.nombre ?? '',
           email: colaborador.email,
+          phone: colaborador.telefono,
           distanceKm,
         };
       })
@@ -71,6 +72,7 @@ export class DtService {
         currentBranch: entry.currentBranch,
         distance: formatDistanceKm(entry.distanceKm),
         email: entry.email,
+        phone: entry.phone,
       }));
   }
 }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -18,6 +19,12 @@ export class RequestsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(colabId: string, dto: CreateRequestDto) {
+    if (dto.currentBranchId === dto.desiredBranchId) {
+      throw new BadRequestException(
+        'La sucursal deseada no puede ser la misma que la sucursal actual.',
+      );
+    }
+
     const [currentBranch, desiredBranch] = await Promise.all([
       this.prisma.sucursal.findUnique({ where: { id: dto.currentBranchId } }),
       this.prisma.sucursal.findUnique({ where: { id: dto.desiredBranchId } }),
