@@ -20,6 +20,8 @@ export class BranchesService {
       name: sucursal.nombre,
       region: sucursal.provincia.region.nombre,
       provincia: sucursal.provincia.nombre,
+      lat: sucursal.lat,
+      lng: sucursal.lng,
     }));
   }
 }

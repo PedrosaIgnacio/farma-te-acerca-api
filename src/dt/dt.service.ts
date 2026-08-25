@@ -61,6 +61,8 @@ export class DtService {
           currentBranch: colaborador.sucursales[0]?.sucursal.nombre ?? '',
           email: colaborador.email,
           phone: colaborador.telefono,
+          lat: domicilio.lat,
+          lng: domicilio.lng,
           distanceKm,
         };
       })
@@ -73,6 +75,8 @@ export class DtService {
         distance: formatDistanceKm(entry.distanceKm),
         email: entry.email,
         phone: entry.phone,
+        lat: entry.lat,
+        lng: entry.lng,
       }));
   }
 }
