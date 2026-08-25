@@ -136,4 +136,36 @@ export class RequestsService {
       })),
     };
   }
+
+  // Collaborator self-cancel is a hard delete, not a transition to
+  // "Cancelada" — the case de uso is undoing a mistaken submission (wrong
+  // branch/reason picked in the form), not recording a formal cancellation
+  // for HC's audit trail, so the solicitud and its historial rows are
+  // removed outright rather than kept around in a terminal estado. Only
+  // allowed while the solicitud is still open (OPEN_STATUSES) — once HC has
+  // moved it to a terminal estado (Finalizada/No aprobado) that outcome is
+  // no longer the collaborator's to erase.
+  async cancel(colabId: string, id: number) {
+    const solicitud = await this.prisma.solicitud.findFirst({
+      where: { id, colabId },
+      include: CURRENT_ESTADO_INCLUDE,
+    });
+    if (!solicitud) {
+      throw new NotFoundException('Solicitud inexistente.');
+    }
+
+    const status = currentEstadoNombre(solicitud);
+    if (!OPEN_STATUSES.includes(status as (typeof OPEN_STATUSES)[number])) {
+      throw new ConflictException(
+        `No es posible cancelar una solicitud en estado "${status}".`,
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.cambioEstadoSolicitud.deleteMany({
+        where: { solicitudId: id },
+      }),
+      this.prisma.solicitud.delete({ where: { id } }),
+    ]);
+  }
 }

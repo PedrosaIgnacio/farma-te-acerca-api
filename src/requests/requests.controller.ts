@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   Post,
@@ -43,5 +45,14 @@ export class RequestsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.requestsService.findOne(user.id, id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  cancel(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.requestsService.cancel(user.id, id);
   }
 }
