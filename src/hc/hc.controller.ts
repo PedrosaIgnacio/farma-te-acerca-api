@@ -49,7 +49,7 @@ export class HcController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRequestStatusDto,
   ) {
-    return this.hcService.updateRequestStatus(id, dto.status, dto.motivo);
+    return this.hcService.updateRequestStatus(id, dto.codigo, dto.motivo);
   }
 
   @Get('analytics')

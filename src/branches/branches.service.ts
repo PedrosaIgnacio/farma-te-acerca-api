@@ -7,7 +7,10 @@ export class BranchesService {
 
   async findAll() {
     const sucursales = await this.prisma.sucursal.findMany({
-      where: { activa: true },
+      where: {
+        activa: true,
+        provincia: { activo: true, region: { activo: true } },
+      },
       orderBy: { nombre: 'asc' },
       include: { provincia: { include: { region: true } } },
     });

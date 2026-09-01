@@ -9,6 +9,7 @@ import { BranchesModule } from './branches/branches.module';
 import { RequestsModule } from './requests/requests.module';
 import { HcModule } from './hc/hc.module';
 import { DtModule } from './dt/dt.module';
+import { EstadosModule } from './estados/estados.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DtModule } from './dt/dt.module';
     RequestsModule,
     HcModule,
     DtModule,
+    EstadosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

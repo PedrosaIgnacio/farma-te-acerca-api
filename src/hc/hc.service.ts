@@ -1,11 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma';
 import {
-  EstadoNombre,
-  STATUS_COLOR,
-  STATUS_ORDER,
+  ALLOWED_TRANSITIONS,
+  CODIGO_ORDER,
+  EstadoCodigo,
   CURRENT_ESTADO_INCLUDE,
+  currentEstadoCodigo,
   currentEstadoNombre,
   formatDateEsAr,
 } from '../common/status.util';
@@ -37,10 +42,14 @@ export class HcService {
   // to resolve "a colaborador's current branch" a third time.
   async findCollaborators() {
     const colaboradores = await this.prisma.colaborador.findMany({
-      where: { rol: { nombre: 'collaborator' }, activo: true },
+      where: { rol: { nombre: 'collaborator', activo: true }, activo: true },
       orderBy: { nombre: 'asc' },
       include: {
-        sucursales: { where: { activo: true }, include: { sucursal: true }, take: 1 },
+        sucursales: {
+          where: { activo: true },
+          include: { sucursal: true },
+          take: 1,
+        },
       },
     });
 
@@ -60,9 +69,12 @@ export class HcService {
 
   async findRequests(filters: HcRequestsQueryDto) {
     const solicitudes = await this.prisma.solicitud.findMany({
-      where: filters.desiredBranchId
-        ? { sucursalDeseadaId: filters.desiredBranchId }
-        : undefined,
+      where: {
+        activo: true,
+        ...(filters.desiredBranchId
+          ? { sucursalDeseadaId: filters.desiredBranchId }
+          : {}),
+      },
       orderBy: { fechaCreacion: 'desc' },
       include: HC_REQUEST_INCLUDE,
     });
@@ -73,22 +85,35 @@ export class HcService {
   // Transitions a solicitud to a new estado. Per DEVIATIONS.md §9, a
   // solicitud's estado is purely derived from CambioEstadoSolicitud, so this
   // must atomically: 1) close the currently-open interval (`fechaFin =
-  // now()`), 2) open a new one for the target estado.
-  async updateRequestStatus(id: number, status: EstadoNombre, motivo: string) {
-    const solicitud = await this.prisma.solicitud.findUnique({
-      where: { id },
+  // now()`), 2) open a new one for the target estado. The target must be a
+  // legal move per ALLOWED_TRANSITIONS (the approved state-machine diagram)
+  // — this is the enforcement point, so a request can't reach an illegal
+  // estado even if a client bypasses the frontend's own guard. Both the
+  // current and target estado are resolved/compared by `codigo` (the
+  // stable business key), not `nombre` — renaming an estado's display
+  // label must never change what it's allowed to transition to.
+  async updateRequestStatus(id: number, codigo: EstadoCodigo, motivo: string) {
+    const solicitud = await this.prisma.solicitud.findFirst({
+      where: { id, activo: true },
       include: HC_REQUEST_INCLUDE,
     });
     if (!solicitud) {
       throw new NotFoundException('Solicitud inexistente.');
     }
-    if (currentEstadoNombre(solicitud) === status) {
+    const currentCodigo = currentEstadoCodigo(solicitud) as EstadoCodigo;
+    if (currentCodigo === codigo) {
       return toHcRequest(solicitud);
     }
 
-    const nuevoEstado = await this.prisma.estadoSolicitud.findUniqueOrThrow({
-      where: { nombre: status },
+    const nuevoEstado = await this.prisma.estadoSolicitud.findFirstOrThrow({
+      where: { codigo, activo: true },
     });
+
+    if (!ALLOWED_TRANSITIONS[currentCodigo].includes(codigo)) {
+      throw new ConflictException(
+        `No es posible pasar de "${currentEstadoNombre(solicitud)}" a "${nuevoEstado.nombre}".`,
+      );
+    }
 
     await this.prisma.$transaction([
       this.prisma.cambioEstadoSolicitud.updateMany({
@@ -108,24 +133,30 @@ export class HcService {
   }
 
   async getAnalytics(filters: AnalyticsQueryDto) {
-    const solicitudes = await this.prisma.solicitud.findMany({
-      where: this.buildWhere(filters),
-      select: {
-        ...CURRENT_ESTADO_INCLUDE,
-        sucursalDeseada: {
-          select: {
-            provincia: { select: { region: { select: { nombre: true } } } },
+    const [solicitudes, estados] = await Promise.all([
+      this.prisma.solicitud.findMany({
+        where: this.buildWhere(filters),
+        select: {
+          ...CURRENT_ESTADO_INCLUDE,
+          sucursalDeseada: {
+            select: {
+              provincia: { select: { region: { select: { nombre: true } } } },
+            },
           },
         },
-      },
-    });
+      }),
+      // Source of {nombre, color} per codigo for the chart — replaces the
+      // old hardcoded STATUS_COLOR map, so a renamed/recolored estado shows
+      // up correctly without a code change.
+      this.prisma.estadoSolicitud.findMany({ where: { activo: true } }),
+    ]);
 
     const total = solicitudes.length;
     const activas = solicitudes.filter(
-      (s) => currentEstadoNombre(s) === 'Activa',
+      (s) => currentEstadoCodigo(s) === 'ACTIVA',
     ).length;
     const exitosas = solicitudes.filter(
-      (s) => currentEstadoNombre(s) === 'Finalizada',
+      (s) => currentEstadoCodigo(s) === 'FINALIZADA',
     ).length;
     const successRate = total === 0 ? 0 : Math.round((exitosas / total) * 100);
 
@@ -138,16 +169,22 @@ export class HcService {
       .map(([region, requests]) => ({ region, requests }))
       .sort((a, b) => b.requests - a.requests);
 
-    const byStatus = new Map<EstadoNombre, number>();
+    const byCodigo = new Map<string, number>();
     for (const s of solicitudes) {
-      const estado = currentEstadoNombre(s) as EstadoNombre;
-      byStatus.set(estado, (byStatus.get(estado) ?? 0) + 1);
+      const codigo = currentEstadoCodigo(s);
+      byCodigo.set(codigo, (byCodigo.get(codigo) ?? 0) + 1);
     }
-    const statusData = STATUS_ORDER.map((estado) => ({
-      name: estado,
-      value: byStatus.get(estado) ?? 0,
-      color: STATUS_COLOR[estado],
-    }));
+    const estadoByCodigo = new Map(estados.map((e) => [e.codigo, e]));
+    const statusData = CODIGO_ORDER.filter((codigo) =>
+      estadoByCodigo.has(codigo),
+    ).map((codigo) => {
+      const estado = estadoByCodigo.get(codigo)!;
+      return {
+        name: estado.nombre,
+        value: byCodigo.get(codigo) ?? 0,
+        color: estado.color,
+      };
+    });
 
     return {
       kpis: {
@@ -199,13 +236,13 @@ export class HcService {
   }
 
   private buildWhere(filters: AnalyticsQueryDto): Prisma.SolicitudWhereInput {
-    const where: Prisma.SolicitudWhereInput = {};
+    const where: Prisma.SolicitudWhereInput = { activo: true };
     if (filters.desiredBranchId) {
       where.sucursalDeseadaId = filters.desiredBranchId;
     }
     if (filters.estado) {
       where.historial = {
-        some: { fechaFin: null, estado: { nombre: filters.estado } },
+        some: { fechaFin: null, estado: { codigo: filters.estado } },
       };
     }
     if (filters.region) {
@@ -229,6 +266,9 @@ function csvEscape(value: string | number): string {
 }
 
 // Shape matches the frontend's `HCRequest` type (src/types/index.ts).
+// `statusCode` rides alongside the display `status` so the frontend can
+// look up allowed transitions/colors by the stable codigo without a
+// separate estados fetch keyed by the (renamable) nombre.
 function toHcRequest(solicitud: SolicitudWithRelations) {
   return {
     id: solicitud.id,
@@ -239,6 +279,7 @@ function toHcRequest(solicitud: SolicitudWithRelations) {
     reason: solicitud.motivo,
     date: formatDateEsAr(solicitud.fechaCreacion),
     status: currentEstadoNombre(solicitud),
+    statusCode: currentEstadoCodigo(solicitud),
     email: solicitud.colaborador.email,
   };
 }

@@ -1,3 +1,29 @@
+# Frontend integration guide — Actualización: estado por `codigo` estable (septiembre 2026)
+
+Reemplaza el `nombre` de un estado (renombrable, es la etiqueta en español) como clave de negocio
+por un `codigo` inmutable (`ACTIVA`, `EN_CURSO`, `APROBADO`, `NO_APROBADO`, `FINALIZADA`,
+`CANCELADA`) — renombrar un estado en la DB ya no puede romper la máquina de estados ni el resto
+de la lógica fija (open-set, orden, color). Detalle completo en `status.util.ts`.
+
+**Cambios de contrato:**
+
+- `PATCH /hc/requests/:id/status` — el body cambia de `{ status, motivo }` (nombre) a
+  `{ codigo, motivo }` (uno de los 6 códigos de arriba). Sigue devolviendo el `HCRequest`
+  actualizado, que ahora trae `statusCode` (`EstadoCodigo`) además de `status` (nombre, sin
+  cambios, sigue siendo lo que se muestra en pantalla).
+- `GET /estados` (nuevo) — devuelve `{ codigo, nombre, color }[]` para los estados con
+  `activo = true`, en el orden fijo de visualización. Reemplaza cualquier lista de estados
+  hardcodeada en el frontend; usarlo para poblar el selector de "nuevo estado" del diálogo de HC.
+- Todo shape que expone un estado (`RequestHistoryEntry`, `RequestDetail`,
+  `RequestStatusHistoryEntry`, `HCRequest`) ahora trae `statusCode` junto al `status` existente.
+  El frontend debe usar `statusCode` para cualquier lógica (transiciones permitidas, si la
+  solicitud sigue cancelable, color del badge/dot) y `status` solo para texto en pantalla — nunca
+  al revés.
+- `estados_solicitud`, `solicitudes`, `roles`, `regiones`, `provincias` ganaron un flag `activo`
+  (soft-delete); todas las lecturas de esas tablas ya filtran `activo = true` server-side.
+
+---
+
 # Frontend integration guide — Actualización: base de datos normalizada (agosto 2026)
 
 Para la sesión trabajando en `farma-te-acerca` (el frontend). La integración original ya está

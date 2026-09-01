@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString } from 'class-validator';
-import { STATUS_LABELS } from '../../common/status.util';
+import { ESTADO_CODIGOS } from '../../common/status.util';
 
 export class AnalyticsQueryDto {
   @ApiProperty({
@@ -18,9 +18,9 @@ export class AnalyticsQueryDto {
   @IsInt()
   desiredBranchId?: number;
 
-  @ApiProperty({ required: false, enum: STATUS_LABELS })
+  @ApiProperty({ required: false, enum: ESTADO_CODIGOS })
   @IsOptional()
-  @IsIn(STATUS_LABELS)
+  @IsIn(ESTADO_CODIGOS)
   estado?: string;
 
   @ApiProperty({

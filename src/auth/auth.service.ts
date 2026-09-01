@@ -27,7 +27,7 @@ export class AuthService {
     const invalidCredentials = () =>
       new UnauthorizedException('Usuario o contraseña incorrectos.');
 
-    if (!colaborador || !colaborador.activo) {
+    if (!colaborador || !colaborador.activo || !colaborador.rol.activo) {
       throw invalidCredentials();
     }
     if (colaborador.intentosFallidos >= MAX_FAILED_ATTEMPTS) {

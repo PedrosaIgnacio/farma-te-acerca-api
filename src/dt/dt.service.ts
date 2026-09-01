@@ -27,7 +27,7 @@ export class DtService {
 
     const candidates = await this.prisma.colaborador.findMany({
       where: {
-        rol: { nombre: 'collaborator' },
+        rol: { nombre: 'collaborator', activo: true },
         activo: true,
         domicilio: { isNot: null },
         sucursales: {

@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  OPEN_STATUSES,
+  OPEN_CODIGOS,
+  EstadoCodigo,
   CURRENT_ESTADO_INCLUDE,
+  currentEstadoCodigo,
   currentEstadoNombre,
   formatDateEsAr,
   formatDateTimeEsAr,
@@ -36,9 +38,10 @@ export class RequestsService {
     const existing = await this.prisma.solicitud.findFirst({
       where: {
         colabId,
+        activo: true,
         sucursalDeseadaId: dto.desiredBranchId,
         historial: {
-          some: { fechaFin: null, estado: { nombre: { in: OPEN_STATUSES } } },
+          some: { fechaFin: null, estado: { codigo: { in: OPEN_CODIGOS } } },
         },
       },
       include: CURRENT_ESTADO_INCLUDE,
@@ -52,8 +55,8 @@ export class RequestsService {
       });
     }
 
-    const estadoActivo = await this.prisma.estadoSolicitud.findUniqueOrThrow({
-      where: { nombre: 'Activa' },
+    const estadoActivo = await this.prisma.estadoSolicitud.findFirstOrThrow({
+      where: { codigo: 'ACTIVA', activo: true },
     });
 
     const solicitud = await this.prisma.solicitud.create({
@@ -76,12 +79,13 @@ export class RequestsService {
       branch: solicitud.sucursalDeseada.nombre,
       date: formatDateEsAr(solicitud.fechaCreacion),
       status: currentEstadoNombre(solicitud),
+      statusCode: currentEstadoCodigo(solicitud),
     };
   }
 
   async findMyHistory(colabId: string) {
     const solicitudes = await this.prisma.solicitud.findMany({
-      where: { colabId },
+      where: { colabId, activo: true },
       orderBy: { fechaCreacion: 'desc' },
       include: { sucursalDeseada: true, ...CURRENT_ESTADO_INCLUDE },
     });
@@ -91,6 +95,7 @@ export class RequestsService {
       branch: solicitud.sucursalDeseada.nombre,
       date: formatDateEsAr(solicitud.fechaCreacion),
       status: currentEstadoNombre(solicitud),
+      statusCode: currentEstadoCodigo(solicitud),
     }));
   }
 
@@ -100,7 +105,7 @@ export class RequestsService {
   // this never leaks whether a given id exists to another collaborator.
   async findOne(colabId: string, id: number) {
     const solicitud = await this.prisma.solicitud.findFirst({
-      where: { id, colabId },
+      where: { id, colabId, activo: true },
       include: {
         sucursalActual: true,
         sucursalDeseada: true,
@@ -128,8 +133,10 @@ export class RequestsService {
       description: solicitud.descripcion,
       date: formatDateEsAr(solicitud.fechaCreacion),
       status: current.estado.nombre,
+      statusCode: current.estado.codigo,
       history: solicitud.historial.map((h) => ({
         status: h.estado.nombre,
+        statusCode: h.estado.codigo,
         startDate: formatDateTimeEsAr(h.fechaInicio),
         endDate: h.fechaFin ? formatDateTimeEsAr(h.fechaFin) : null,
         motivo: h.motivo,
@@ -147,17 +154,17 @@ export class RequestsService {
   // no longer the collaborator's to erase.
   async cancel(colabId: string, id: number) {
     const solicitud = await this.prisma.solicitud.findFirst({
-      where: { id, colabId },
+      where: { id, colabId, activo: true },
       include: CURRENT_ESTADO_INCLUDE,
     });
     if (!solicitud) {
       throw new NotFoundException('Solicitud inexistente.');
     }
 
-    const status = currentEstadoNombre(solicitud);
-    if (!OPEN_STATUSES.includes(status as (typeof OPEN_STATUSES)[number])) {
+    const codigo = currentEstadoCodigo(solicitud) as EstadoCodigo;
+    if (!OPEN_CODIGOS.includes(codigo)) {
       throw new ConflictException(
-        `No es posible cancelar una solicitud en estado "${status}".`,
+        `No es posible cancelar una solicitud en estado "${currentEstadoNombre(solicitud)}".`,
       );
     }
 

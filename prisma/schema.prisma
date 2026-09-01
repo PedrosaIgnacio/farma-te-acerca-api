@@ -27,8 +27,12 @@ enum Motivo {
 // src/auth/types.ts, resolved against this table by `nombre` (unique) via
 // Prisma relation filters/`connect` — no id caching layer. See DEVIATIONS.md.
 model Rol {
-  id     Int    @id @default(autoincrement())
-  nombre String @unique
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  // Soft-delete flag: an inactive rol is excluded from every query that
+  // resolves/filters colaboradores by role (findCollaborators, DT's nearby
+  // search) and fails login for any colaborador still assigned to it.
+  activo Boolean @default(true)
 
   colaboradores Colaborador[]
 
@@ -41,7 +45,24 @@ model Rol {
 // toStatusLabel/fromStatusLabel translation layer in status.util.ts is gone.
 model EstadoSolicitud {
   id     Int    @id @default(autoincrement())
+  // Stable, immutable business key (e.g. "EN_CURSO") — everything that
+  // reasons about the estado (ALLOWED_TRANSITIONS, OPEN_CODIGOS,
+  // CODIGO_ORDER, the HC status-change DTO) keys off this, never off
+  // `nombre`. `nombre` is a free-to-rename Spanish display label; renaming
+  // it must never break the state machine, which is exactly the bug this
+  // column fixes (see farma-te-acerca's CLAUDE.md history for the original
+  // report).
+  codigo String @unique
   nombre String @unique
+  // Hex color driving the analytics pie chart / CSV, resolved by `codigo`
+  // like everything else here — previously a hardcoded `STATUS_COLOR` map
+  // in status.util.ts keyed by `nombre`, with the same rename-fragility.
+  color  String
+  // Soft-delete flag: an inactive estado can no longer be assigned (created
+  // into or transitioned to), but a `CambioEstadoSolicitud` row that already
+  // references it keeps showing it in a solicitud's historial — history
+  // isn't rewritten just because an estado was later deactivated.
+  activo Boolean @default(true)
 
   cambios CambioEstadoSolicitud[]
 
@@ -52,8 +73,9 @@ model EstadoSolicitud {
 // regions plus "Internacional" (a deviation — see DEVIATIONS.md §11) for the
 // one non-Argentine demo sucursal (Montevideo).
 model Region {
-  id     Int    @id @default(autoincrement())
-  nombre String @unique
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
 
   provincias Provincia[]
 
@@ -64,10 +86,11 @@ model Region {
 // — one hierarchy for both, replacing the free-string region/zona/provincia
 // fields each used to carry independently. See DEVIATIONS.md §11.
 model Provincia {
-  id       Int    @id @default(autoincrement())
-  nombre   String @unique
-  regionId Int    @map("id_region")
-  region   Region @relation(fields: [regionId], references: [id])
+  id       Int     @id @default(autoincrement())
+  nombre   String  @unique
+  regionId Int     @map("id_region")
+  region   Region  @relation(fields: [regionId], references: [id])
+  activo   Boolean @default(true)
 
   sucursales Sucursal[]
   domicilios ColabDomicilio[]
@@ -119,8 +142,8 @@ model Sucursal {
   lng         Float?
 
   colaboradores       ColabSucursal[]
-  solicitudesActuales Solicitud[] @relation("SolicitudSucursalActual")
-  solicitudesDeseadas Solicitud[] @relation("SolicitudSucursalDeseada")
+  solicitudesActuales Solicitud[]     @relation("SolicitudSucursalActual")
+  solicitudesDeseadas Solicitud[]     @relation("SolicitudSucursalDeseada")
 
   @@map("sucursales")
 }
@@ -186,6 +209,10 @@ model Solicitud {
   otroMotivo        String?     @map("otro_motivo")
   descripcion       String?
   fechaCreacion     DateTime    @default(now()) @map("fecha_creacion")
+  // Soft-delete flag, distinct from the estado state machine — an inactive
+  // solicitud is excluded from every read (collaborator history, HC list,
+  // analytics) regardless of what estado its historial says it's in.
+  activo            Boolean     @default(true)
 
   historial CambioEstadoSolicitud[]
 
