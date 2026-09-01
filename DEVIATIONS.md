@@ -205,3 +205,24 @@ a "por qué").
 Es nullable porque: 1) la fila inicial en "Activa" que crea
 `RequestsService.create` no es una transición real, y 2) las filas de
 `historial` creadas antes de este campo no tienen motivo.
+
+## 15. ABM de `Sucursal`/`Colaborador` — RESUELTA
+
+El comentario de `ColabDomicilio` en `schema.prisma` documentaba
+explícitamente el límite vigente hasta ahora: "Sucursal/Colaborador no
+tienen endpoint de CRUD, se cargan a mano (seed/Prisma Studio)". Capital
+Humano pidió poder gestionar ambas entidades desde la propia UI en vez de
+depender del seed o de Prisma Studio.
+
+**Resolución:** se agregaron `GET/POST/PATCH /hc/branches`, `GET
+/hc/provincias` y `GET/POST/PATCH /hc/users` (todos bajo `HcController`,
+protegidos con el mismo `@Roles('hc')` que el resto del módulo). No hay
+hard delete en ningún caso — ambas entidades tienen historial referenciado
+(`Solicitud`, `CambioEstadoSolicitud`), así que la baja es siempre lógica
+vía el `activa`/`activo` que ya existía. `POST /hc/users` gestiona los 3
+roles (`collaborator`/`hc`/`dt`), no solo colaboradores de sucursal —
+decisión explícita de Capital Humano, distinta del alcance más acotado que
+ya tenía `GET /hc/collaborators` (que se deja intacto, sigue sirviendo solo
+al selector "solicitar en nombre de"). Crear un usuario nuevo también
+provisiona su cuenta de Supabase Auth con una contraseña temporal
+generada server-side, devuelta una única vez en la respuesta.

@@ -18,7 +18,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { CreateHcRequestDto } from './dto/create-hc-request.dto';
+import { CreateHcUserDto } from './dto/create-hc-user.dto';
+import { CreateSucursalDto } from './dto/create-sucursal.dto';
+import { UpdateHcUserDto } from './dto/update-hc-user.dto';
 import { UpdateRequestStatusDto } from './dto/update-request-status.dto';
+import { UpdateSucursalDto } from './dto/update-sucursal.dto';
 import { HcService } from './hc.service';
 
 @ApiTags('hc')
@@ -32,6 +36,44 @@ export class HcController {
   @Get('collaborators')
   findCollaborators() {
     return this.hcService.findCollaborators();
+  }
+
+  @Get('branches')
+  findBranches() {
+    return this.hcService.findBranches();
+  }
+
+  @Post('branches')
+  createBranch(@Body() dto: CreateSucursalDto) {
+    return this.hcService.createBranch(dto);
+  }
+
+  @Patch('branches/:id')
+  updateBranch(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSucursalDto,
+  ) {
+    return this.hcService.updateBranch(id, dto);
+  }
+
+  @Get('provincias')
+  findProvincias() {
+    return this.hcService.findProvincias();
+  }
+
+  @Get('users')
+  findUsers() {
+    return this.hcService.findUsers();
+  }
+
+  @Post('users')
+  createUser(@Body() dto: CreateHcUserDto) {
+    return this.hcService.createUser(dto);
+  }
+
+  @Patch('users/:id')
+  updateUser(@Param('id') id: string, @Body() dto: UpdateHcUserDto) {
+    return this.hcService.updateUser(id, dto);
   }
 
   @Get('requests')

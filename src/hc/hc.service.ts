@@ -1,9 +1,11 @@
+import { randomBytes } from 'crypto';
 import {
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import { Prisma } from '../../generated/prisma';
 import {
   ALLOWED_TRANSITIONS,
@@ -17,7 +19,11 @@ import {
 import { RequestsService } from '../requests/requests.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { CreateHcRequestDto } from './dto/create-hc-request.dto';
+import { CreateHcUserDto } from './dto/create-hc-user.dto';
+import { CreateSucursalDto } from './dto/create-sucursal.dto';
 import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
+import { UpdateHcUserDto } from './dto/update-hc-user.dto';
+import { UpdateSucursalDto } from './dto/update-sucursal.dto';
 
 const HC_REQUEST_INCLUDE = {
   colaborador: true,
@@ -30,11 +36,33 @@ type SolicitudWithRelations = Prisma.SolicitudGetPayload<{
   include: typeof HC_REQUEST_INCLUDE;
 }>;
 
+const SUCURSAL_INCLUDE = {
+  provincia: { include: { region: true } },
+} satisfies Prisma.SucursalInclude;
+
+type SucursalWithRelations = Prisma.SucursalGetPayload<{
+  include: typeof SUCURSAL_INCLUDE;
+}>;
+
+const HC_USER_INCLUDE = {
+  rol: true,
+  sucursales: {
+    where: { activo: true },
+    include: { sucursal: true },
+    take: 1,
+  },
+} satisfies Prisma.ColaboradorInclude;
+
+type ColaboradorWithRelations = Prisma.ColaboradorGetPayload<{
+  include: typeof HC_USER_INCLUDE;
+}>;
+
 @Injectable()
 export class HcService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestsService: RequestsService,
+    private readonly supabase: SupabaseService,
   ) {}
 
   // Same role/activo/current-branch shape as DtService.findNearby's
@@ -60,6 +88,151 @@ export class HcService {
       currentBranchId: c.sucursales[0]?.sucursal.id ?? null,
       currentBranch: c.sucursales[0]?.sucursal.nombre ?? null,
     }));
+  }
+
+  // Management listing for the Sucursales ABM — unlike BranchesService.findAll
+  // (public, active-only, used by branch pickers), this returns every
+  // sucursal regardless of `activa` so HC can find and reactivate one.
+  async findBranches() {
+    const sucursales = await this.prisma.sucursal.findMany({
+      orderBy: { nombre: 'asc' },
+      include: SUCURSAL_INCLUDE,
+    });
+    return sucursales.map(toSucursalDto);
+  }
+
+  async createBranch(dto: CreateSucursalDto) {
+    await this.assertProvinciaExists(dto.provinciaId);
+    await this.assertSucursalNombreAvailable(dto.nombre);
+
+    const sucursal = await this.prisma.sucursal.create({
+      data: {
+        nombre: dto.nombre,
+        provinciaId: dto.provinciaId,
+        lat: dto.lat,
+        lng: dto.lng,
+      },
+      include: SUCURSAL_INCLUDE,
+    });
+    return toSucursalDto(sucursal);
+  }
+
+  async updateBranch(id: number, dto: UpdateSucursalDto) {
+    const existing = await this.prisma.sucursal.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Sucursal inexistente.');
+    }
+    if (dto.provinciaId !== undefined) {
+      await this.assertProvinciaExists(dto.provinciaId);
+    }
+    if (dto.nombre !== undefined && dto.nombre !== existing.nombre) {
+      await this.assertSucursalNombreAvailable(dto.nombre);
+    }
+
+    const sucursal = await this.prisma.sucursal.update({
+      where: { id },
+      data: {
+        nombre: dto.nombre,
+        provinciaId: dto.provinciaId,
+        lat: dto.lat,
+        lng: dto.lng,
+        activa: dto.activa,
+      },
+      include: SUCURSAL_INCLUDE,
+    });
+    return toSucursalDto(sucursal);
+  }
+
+  // Lookup for the Sucursal form's provincia Select — nothing else currently
+  // exposes the Provincia catalog to the frontend (it only ever appears
+  // flattened as a string on Branch.provincia/Branch.region).
+  async findProvincias() {
+    const provincias = await this.prisma.provincia.findMany({
+      where: { activo: true, region: { activo: true } },
+      orderBy: { nombre: 'asc' },
+      include: { region: true },
+    });
+    return provincias.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      region: { id: p.region.id, nombre: p.region.nombre },
+    }));
+  }
+
+  private async assertProvinciaExists(provinciaId: number) {
+    const provincia = await this.prisma.provincia.findUnique({
+      where: { id: provinciaId },
+    });
+    if (!provincia) {
+      throw new NotFoundException('Provincia inexistente.');
+    }
+  }
+
+  private async assertSucursalExists(sucursalId: number) {
+    const sucursal = await this.prisma.sucursal.findUnique({
+      where: { id: sucursalId },
+    });
+    if (!sucursal) {
+      throw new NotFoundException('Sucursal inexistente.');
+    }
+  }
+
+  private async assertSucursalNombreAvailable(nombre: string) {
+    const existing = await this.prisma.sucursal.findUnique({
+      where: { nombre },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Ya existe una sucursal con nombre "${nombre}".`,
+      );
+    }
+  }
+
+  async findUsers() {
+    const colaboradores = await this.prisma.colaborador.findMany({
+      orderBy: { nombre: 'asc' },
+      include: HC_USER_INCLUDE,
+    });
+    return colaboradores.map(toHcUserDto);
+  }
+
+  private async assertLegajoAvailable(legajo: string) {
+    const existing = await this.prisma.colaborador.findUnique({
+      where: { legajo },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Ya existe un colaborador con legajo "${legajo}".`,
+      );
+    }
+  }
+
+  private async assertEmailAvailable(email: string) {
+    const existing = await this.prisma.colaborador.findUnique({
+      where: { email },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Ya existe un colaborador con email "${email}".`,
+      );
+    }
+  }
+
+  // TEMPORARY STUB — replace with the real implementation from
+  // /private/tmp/claude-501/.../hc-service-createUser-updateUser.ts
+  // (blocked from being applied automatically by the auto-mode permission
+  // classifier since it creates/deletes Supabase Auth accounts). Only
+  // present so the rest of this file compiles for verification.
+  async createUser(dto: CreateHcUserDto): Promise<never> {
+    void dto;
+    throw new Error('createUser not yet implemented — see scratch file.');
+  }
+
+  // TEMPORARY STUB — same as createUser above.
+  async updateUser(id: string, dto: UpdateHcUserDto): Promise<never> {
+    void id;
+    void dto;
+    throw new Error('updateUser not yet implemented — see scratch file.');
   }
 
   async createRequest(dto: CreateHcRequestDto) {
@@ -281,5 +454,40 @@ function toHcRequest(solicitud: SolicitudWithRelations) {
     status: currentEstadoNombre(solicitud),
     statusCode: currentEstadoCodigo(solicitud),
     email: solicitud.colaborador.email,
+  };
+}
+
+// Shape matches the frontend's `Branch` type plus `activa`/`provinciaId`,
+// which the public BranchesService.findAll's Branch shape omits — those
+// two only matter to the management screen (toggling activa, editing
+// provincia), not to the read-only branch pickers used elsewhere.
+function toSucursalDto(sucursal: SucursalWithRelations) {
+  return {
+    id: sucursal.id,
+    name: sucursal.nombre,
+    provinciaId: sucursal.provinciaId,
+    provincia: sucursal.provincia.nombre,
+    region: sucursal.provincia.region.nombre,
+    activa: sucursal.activa,
+    lat: sucursal.lat,
+    lng: sucursal.lng,
+  };
+}
+
+// Shape matches the frontend's `HcUser` type — distinct from the narrower
+// `HcCollaborator` shape `findCollaborators` above returns (which stays
+// scoped to active `collaborator`-role people for the "solicitar en nombre
+// de" select).
+function toHcUserDto(colaborador: ColaboradorWithRelations) {
+  return {
+    id: colaborador.id,
+    legajo: colaborador.legajo,
+    nombre: colaborador.nombre,
+    email: colaborador.email,
+    telefono: colaborador.telefono,
+    rol: colaborador.rol.nombre,
+    activo: colaborador.activo,
+    currentBranchId: colaborador.sucursales[0]?.sucursal.id ?? null,
+    currentBranch: colaborador.sucursales[0]?.sucursal.nombre ?? null,
   };
 }

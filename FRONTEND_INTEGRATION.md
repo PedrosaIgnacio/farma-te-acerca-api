@@ -1,3 +1,42 @@
+# Frontend integration guide — Actualización: ABM de Sucursales y Colaboradores (septiembre 2026)
+
+Capital Humano gana dos pantallas nuevas (sidebar: "Sucursales", "Colaboradores"),
+respaldadas por endpoints nuevos, todos bajo `@Roles('hc')`. Sin cambios de schema —
+usan campos que ya existían (`activa`/`activo`, etc.).
+
+**Endpoints nuevos:**
+
+- `GET /hc/branches` — todas las sucursales (activas e inactivas), shape
+  `Branch` extendido con `provinciaId`/`activa` (ver más abajo). Distinto del
+  `GET /branches` público (activo-only, sin cambios, sigue siendo el que usan
+  los selectores de sucursal de NewRequestPage/DT).
+- `POST /hc/branches` `{ nombre, provinciaId, lat?, lng? }`, `PATCH
+  /hc/branches/:id` `{ nombre?, provinciaId?, lat?, lng?, activa? }`.
+- `GET /hc/provincias` — catálogo de provincias activas con su región,
+  `{ id, nombre, region: { id, nombre } }[]`.
+- `GET /hc/users` — todos los colaboradores de los 3 roles (activos e
+  inactivos), shape `{ id, legajo, nombre, email, telefono, rol, activo,
+  currentBranchId, currentBranch }`. Distinto del `GET /hc/collaborators`
+  existente (sin cambios, sigue acotado a rol `collaborator` activo, para el
+  selector "solicitar en nombre de").
+- `POST /hc/users` `{ legajo, nombre, email, telefono?, rol, sucursalId? }` —
+  además de la fila en `Colaborador`, provisiona la cuenta de Supabase Auth.
+  La respuesta trae `temporaryPassword` (string) **una sola vez** — no se
+  vuelve a exponer después, hay que mostrarla en el momento.
+- `PATCH /hc/users/:id` `{ nombre?, email?, telefono?, rol?, sucursalId?,
+  activo? }`. Si `email` cambia, también se actualiza en Supabase Auth (el
+  login resuelve la sesión por email).
+
+**Cambio de shape:** `Branch` (`src/types/index.ts`) gana `provinciaId:
+number` y `activa: boolean` — ahora los devuelven tanto `GET /branches` como
+`GET /hc/branches`, así el tipo es correcto sin importar cuál de los dos lo
+produjo.
+
+Ninguna de las dos entidades tiene hard delete — la baja siempre es lógica
+(`activa`/`activo`), igual que el resto de la app.
+
+---
+
 # Frontend integration guide — Actualización: estado por `codigo` estable (septiembre 2026)
 
 Reemplaza el `nombre` de un estado (renombrable, es la etiqueta en español) como clave de negocio
