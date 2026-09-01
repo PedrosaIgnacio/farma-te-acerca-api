@@ -218,21 +218,104 @@ export class HcService {
     }
   }
 
-  // TEMPORARY STUB — replace with the real implementation from
-  // /private/tmp/claude-501/.../hc-service-createUser-updateUser.ts
-  // (blocked from being applied automatically by the auto-mode permission
-  // classifier since it creates/deletes Supabase Auth accounts). Only
-  // present so the rest of this file compiles for verification.
-  async createUser(dto: CreateHcUserDto): Promise<never> {
-    void dto;
-    throw new Error('createUser not yet implemented — see scratch file.');
+  // Creates both the Colaborador row and its Supabase Auth account. A
+  // temporary password is generated here and returned once in the response
+  // — there's no invite-email flow, HC relays it to the person out-of-band.
+  async createUser(dto: CreateHcUserDto) {
+    await this.assertLegajoAvailable(dto.legajo);
+    await this.assertEmailAvailable(dto.email);
+    if (dto.sucursalId !== undefined) {
+      await this.assertSucursalExists(dto.sucursalId);
+    }
+
+    const temporaryPassword = randomBytes(9).toString('base64url');
+    const { data, error } = await this.supabase.admin.auth.admin.createUser({
+      email: dto.email,
+      password: temporaryPassword,
+      email_confirm: true,
+    });
+    if (error || !data.user) {
+      throw new ConflictException(
+        error?.message ?? 'No se pudo crear la cuenta de acceso.',
+      );
+    }
+
+    try {
+      const colaborador = await this.prisma.colaborador.create({
+        data: {
+          id: data.user.id,
+          legajo: dto.legajo,
+          nombre: dto.nombre,
+          email: dto.email,
+          telefono: dto.telefono,
+          rol: { connect: { nombre: dto.rol } },
+          ...(dto.sucursalId !== undefined
+            ? { sucursales: { create: { sucursalId: dto.sucursalId } } }
+            : {}),
+        },
+        include: HC_USER_INCLUDE,
+      });
+      return { ...toHcUserDto(colaborador), temporaryPassword };
+    } catch (err) {
+      await this.supabase.admin.auth.admin.deleteUser(data.user.id);
+      throw err;
+    }
   }
 
-  // TEMPORARY STUB — same as createUser above.
-  async updateUser(id: string, dto: UpdateHcUserDto): Promise<never> {
-    void id;
-    void dto;
-    throw new Error('updateUser not yet implemented — see scratch file.');
+  async updateUser(id: string, dto: UpdateHcUserDto) {
+    const colaborador = await this.prisma.colaborador.findUnique({
+      where: { id },
+      include: { sucursales: { where: { activo: true }, take: 1 } },
+    });
+    if (!colaborador) {
+      throw new NotFoundException('Colaborador inexistente.');
+    }
+
+    if (dto.email !== undefined && dto.email !== colaborador.email) {
+      await this.assertEmailAvailable(dto.email);
+      const { error } = await this.supabase.admin.auth.admin.updateUserById(
+        id,
+        { email: dto.email },
+      );
+      if (error) {
+        throw new ConflictException(error.message);
+      }
+    }
+
+    if (dto.sucursalId !== undefined) {
+      await this.assertSucursalExists(dto.sucursalId);
+      const current = colaborador.sucursales[0];
+      if (!current || current.sucursalId !== dto.sucursalId) {
+        await this.prisma.$transaction([
+          ...(current
+            ? [
+                this.prisma.colabSucursal.update({
+                  where: { id: current.id },
+                  data: { activo: false },
+                }),
+              ]
+            : []),
+          this.prisma.colabSucursal.create({
+            data: { colabId: id, sucursalId: dto.sucursalId, activo: true },
+          }),
+        ]);
+      }
+    }
+
+    const updated = await this.prisma.colaborador.update({
+      where: { id },
+      data: {
+        nombre: dto.nombre,
+        email: dto.email,
+        telefono: dto.telefono,
+        activo: dto.activo,
+        ...(dto.rol !== undefined
+          ? { rol: { connect: { nombre: dto.rol } } }
+          : {}),
+      },
+      include: HC_USER_INCLUDE,
+    });
+    return toHcUserDto(updated);
   }
 
   async createRequest(dto: CreateHcRequestDto) {
