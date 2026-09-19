@@ -2,10 +2,12 @@ import { randomBytes } from 'crypto';
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { MailService } from '../mail/mail.service';
 import { Prisma } from '../../generated/prisma';
 import {
   ALLOWED_TRANSITIONS,
@@ -63,10 +65,13 @@ type ColaboradorWithRelations = Prisma.ColaboradorGetPayload<{
 
 @Injectable()
 export class HcService {
+  private readonly logger = new Logger(HcService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestsService: RequestsService,
     private readonly supabase: SupabaseService,
+    private readonly mailService: MailService,
   ) {}
 
   // Same role/activo/current-branch shape as DtService.findNearby's
@@ -389,6 +394,24 @@ export class HcService {
       where: { id },
       include: HC_REQUEST_INCLUDE,
     });
+
+    try {
+      await this.mailService.sendSolicitudStatusChanged({
+        to: updated.colaborador.email,
+        colaboradorNombre: updated.colaborador.nombre,
+        codigo,
+        estadoNombre: nuevoEstado.nombre,
+        sucursalActual: updated.sucursalActual.nombre,
+        sucursalDeseada: updated.sucursalDeseada.nombre,
+        motivo,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send status-change email for solicitud ${id}`,
+        err instanceof Error ? err.stack : err,
+      );
+    }
+
     return toHcRequest(updated);
   }
 

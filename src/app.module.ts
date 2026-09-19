@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
+import { MailModule } from './mail/mail.module';
 import { AuthModule } from './auth/auth.module';
 import { BranchesModule } from './branches/branches.module';
 import { RequestsModule } from './requests/requests.module';
@@ -16,6 +17,7 @@ import { EstadosModule } from './estados/estados.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     SupabaseModule,
+    MailModule,
     AuthModule,
     BranchesModule,
     RequestsModule,
