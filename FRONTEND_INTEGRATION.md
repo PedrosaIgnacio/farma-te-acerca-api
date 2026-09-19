@@ -1,3 +1,29 @@
+# Frontend integration guide — Actualización: solicitudes por puesto en Analytics (septiembre 2026)
+
+`Colaborador` gana la columna `descripcion_puesto` (`String?`, nullable) — el
+nombre del puesto que ocupa en Farmacity (ej. "Cajero/a", "Farmacéutico/a"),
+distinto de `rol` (que sigue siendo el rol de acceso: collaborator/hc/dt). No
+hay catálogo cerrado, es texto libre cargado por HR; puede no estar seteado en
+colaboradores existentes.
+
+**Cambio de shape:** `GET /hc/analytics` gana un tercer array en la respuesta,
+junto a `regionData`/`statusData` ya existentes:
+
+```
+puestoData: { puesto: string; requests: number }[]
+```
+
+Ordenado descendente por `requests`, igual que `regionData`. Las solicitudes
+de un colaborador sin `descripcion_puesto` cargado se agrupan bajo el literal
+`"Sin puesto asignado"`. No se agregó ningún query param nuevo — `puestoData`
+respeta los mismos filtros (`region`, `desiredBranchId`, `estado`, `from`,
+`to`) que ya aplicaba `regionData`/`statusData`.
+
+`GET /hc/requests/export` (CSV) también gana una columna `puesto` (entre
+`legajo` y `sucursal_actual`), con el mismo fallback `"Sin puesto asignado"`.
+
+---
+
 # Frontend integration guide — Actualización: ABM de Sucursales y Colaboradores (septiembre 2026)
 
 Capital Humano gana dos pantallas nuevas (sidebar: "Sucursales", "Colaboradores"),

@@ -25,6 +25,10 @@ import { HcRequestsQueryDto } from './dto/hc-requests-query.dto';
 import { UpdateHcUserDto } from './dto/update-hc-user.dto';
 import { UpdateSucursalDto } from './dto/update-sucursal.dto';
 
+// Bucket for solicitudes whose colaborador has no descripcion_puesto set —
+// shared between the analytics breakdown and the CSV export.
+const PUESTO_FALLBACK = 'Sin puesto asignado';
+
 const HC_REQUEST_INCLUDE = {
   colaborador: true,
   sucursalActual: true,
@@ -399,6 +403,7 @@ export class HcService {
               provincia: { select: { region: { select: { nombre: true } } } },
             },
           },
+          colaborador: { select: { descripcionPuesto: true } },
         },
       }),
       // Source of {nombre, color} per codigo for the chart — replaces the
@@ -442,6 +447,15 @@ export class HcService {
       };
     });
 
+    const byPuesto = new Map<string, number>();
+    for (const s of solicitudes) {
+      const puesto = s.colaborador.descripcionPuesto ?? PUESTO_FALLBACK;
+      byPuesto.set(puesto, (byPuesto.get(puesto) ?? 0) + 1);
+    }
+    const puestoData = [...byPuesto.entries()]
+      .map(([puesto, requests]) => ({ puesto, requests }))
+      .sort((a, b) => b.requests - a.requests);
+
     return {
       kpis: {
         totalSolicitudes: total,
@@ -451,6 +465,7 @@ export class HcService {
       },
       regionData,
       statusData,
+      puestoData,
     };
   }
 
@@ -465,6 +480,7 @@ export class HcService {
       'id',
       'colaborador',
       'legajo',
+      'puesto',
       'sucursal_actual',
       'sucursal_deseada',
       'motivo',
@@ -477,6 +493,7 @@ export class HcService {
         solicitud.id,
         solicitud.colaborador.nombre,
         solicitud.colaborador.legajo,
+        solicitud.colaborador.descripcionPuesto ?? PUESTO_FALLBACK,
         solicitud.sucursalActual.nombre,
         solicitud.sucursalDeseada.nombre,
         solicitud.motivo,

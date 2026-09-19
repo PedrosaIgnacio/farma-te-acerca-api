@@ -110,6 +110,9 @@ model Colaborador {
   email              String   @unique
   telefono           String?
   activo             Boolean  @default(true)
+  // Farmacity job title (e.g. "Farmacéutico/a", "Cajero/a") — free text,
+  // distinct from `rol` below, which is the auth role (collaborator/hc/dt).
+  descripcionPuesto  String?  @map("descripcion_puesto")
   // Implements the "block after 5 failed attempts" requirement, which
   // Supabase Auth does not enforce on its own. Reset to 0 whenever the
   // colaborador successfully resets their password.

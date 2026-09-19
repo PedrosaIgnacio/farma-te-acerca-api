@@ -59,6 +59,17 @@ const ESTADOS = [
   'Cancelada',
 ] as const;
 
+// codigo/color per nombre — mirrors the backfill values from the
+// add_estado_codigo_color migration (src/common/status.util.ts ESTADO_CODIGOS).
+const ESTADO_META: Record<(typeof ESTADOS)[number], { codigo: string; color: string }> = {
+  Activa: { codigo: 'ACTIVA', color: '#0284C7' },
+  'En curso': { codigo: 'EN_CURSO', color: '#D97706' },
+  Aprobado: { codigo: 'APROBADO', color: '#7C3AED' },
+  'No aprobado': { codigo: 'NO_APROBADO', color: '#DC2626' },
+  Finalizada: { codigo: 'FINALIZADA', color: '#1F7A4D' },
+  Cancelada: { codigo: 'CANCELADA', color: '#78716C' },
+};
+
 // Same 8 branches the frontend already ships in src/data/mockData.ts
 // (BRANCHES) — keeping ids/names aligned means the frontend's existing
 // branch strings still resolve once it's wired to this API. `provincia`
@@ -94,6 +105,7 @@ const DEMO_PROFILES = [
     legajo: '10001',
     fullName: 'Colaborador Demo',
     role: 'collaborator' as const,
+    puesto: 'Cajero/a',
     email: 'colaborador.demo@farmacity.com',
     branch: 'Farmacity Palermo',
     domicilio: {
@@ -108,6 +120,7 @@ const DEMO_PROFILES = [
     legajo: '10002',
     fullName: 'Capital Humano Demo',
     role: 'hc' as const,
+    puesto: 'Analista de Capital Humano',
     email: 'hc.demo@farmacity.com',
     branch: 'Farmacity Palermo',
     domicilio: null,
@@ -116,6 +129,7 @@ const DEMO_PROFILES = [
     legajo: '10003',
     fullName: 'DT Demo',
     role: 'dt' as const,
+    puesto: 'Director/a Técnico/a',
     email: 'dt.demo@farmacity.com',
     branch: 'Farmacity Palermo',
     domicilio: null,
@@ -124,6 +138,7 @@ const DEMO_PROFILES = [
     legajo: '10004',
     fullName: 'Martina Suárez',
     role: 'collaborator' as const,
+    puesto: 'Farmacéutico/a',
     email: 'martina.suarez@farmacity.com',
     branch: 'Farmacity Belgrano',
     domicilio: {
@@ -138,6 +153,7 @@ const DEMO_PROFILES = [
     legajo: '10005',
     fullName: 'Diego Ramallo',
     role: 'collaborator' as const,
+    puesto: 'Encargado/a de turno',
     email: 'diego.ramallo@farmacity.com',
     branch: 'Farmacity Rosario Centro',
     domicilio: {
@@ -154,6 +170,7 @@ const DEMO_PROFILES = [
     legajo: '10006',
     fullName: 'Sofía Martínez',
     role: 'collaborator' as const,
+    puesto: 'Repositor/a',
     email: 'sofia.martinez@farmacity.com',
     branch: 'Farmacity Palermo',
     domicilio: {
@@ -168,6 +185,7 @@ const DEMO_PROFILES = [
     legajo: '10007',
     fullName: 'Tomás Fernández',
     role: 'collaborator' as const,
+    puesto: 'Auxiliar de farmacia',
     email: 'tomas.fernandez@farmacity.com',
     branch: 'Farmacity Palermo',
     domicilio: {
@@ -182,6 +200,7 @@ const DEMO_PROFILES = [
     legajo: '10008',
     fullName: 'Valentina López',
     role: 'collaborator' as const,
+    puesto: 'Cajero/a',
     email: 'valentina.lopez@farmacity.com',
     branch: 'Farmacity Belgrano',
     domicilio: {
@@ -196,6 +215,7 @@ const DEMO_PROFILES = [
     legajo: '10009',
     fullName: 'Agustín Díaz',
     role: 'collaborator' as const,
+    puesto: 'Farmacéutico/a',
     email: 'agustin.diaz@farmacity.com',
     branch: 'Farmacity Belgrano',
     domicilio: {
@@ -210,6 +230,7 @@ const DEMO_PROFILES = [
     legajo: '10010',
     fullName: 'Camila Torres',
     role: 'collaborator' as const,
+    puesto: 'Encargado/a de turno',
     email: 'camila.torres@farmacity.com',
     branch: 'Farmacity Rosario Centro',
     // Original -32.93,-60.63 fell in the Paraná river with no reverse-geocode
@@ -226,6 +247,7 @@ const DEMO_PROFILES = [
     legajo: '10011',
     fullName: 'Franco Romero',
     role: 'collaborator' as const,
+    puesto: 'Repositor/a',
     email: 'franco.romero@farmacity.com',
     branch: 'Farmacity Rosario Centro',
     domicilio: {
@@ -240,6 +262,7 @@ const DEMO_PROFILES = [
     legajo: '10012',
     fullName: 'Julieta Sosa',
     role: 'collaborator' as const,
+    puesto: 'Auxiliar de farmacia',
     email: 'julieta.sosa@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
     domicilio: {
@@ -254,6 +277,7 @@ const DEMO_PROFILES = [
     legajo: '10013',
     fullName: 'Matías Herrera',
     role: 'collaborator' as const,
+    puesto: 'Cajero/a',
     email: 'matias.herrera@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
     domicilio: {
@@ -268,6 +292,7 @@ const DEMO_PROFILES = [
     legajo: '10014',
     fullName: 'Lucía Acosta',
     role: 'collaborator' as const,
+    puesto: 'Farmacéutico/a',
     email: 'lucia.acosta@farmacity.com',
     branch: 'Farmacity Córdoba Nueva Córdoba',
     domicilio: {
@@ -282,6 +307,7 @@ const DEMO_PROFILES = [
     legajo: '10015',
     fullName: 'Nicolás Molina',
     role: 'collaborator' as const,
+    puesto: 'Encargado/a de turno',
     email: 'nicolas.molina@farmacity.com',
     branch: 'Farmacity Mendoza Centro',
     domicilio: {
@@ -296,6 +322,7 @@ const DEMO_PROFILES = [
     legajo: '10016',
     fullName: 'Florencia Rojas',
     role: 'collaborator' as const,
+    puesto: 'Repositor/a',
     email: 'florencia.rojas@farmacity.com',
     branch: 'Farmacity Mendoza Centro',
     domicilio: {
@@ -310,6 +337,7 @@ const DEMO_PROFILES = [
     legajo: '10017',
     fullName: 'Bruno Castro',
     role: 'collaborator' as const,
+    puesto: 'Auxiliar de farmacia',
     email: 'bruno.castro@farmacity.com',
     branch: 'Farmacity Salta Centro',
     domicilio: {
@@ -324,6 +352,7 @@ const DEMO_PROFILES = [
     legajo: '10018',
     fullName: 'Milagros Vega',
     role: 'collaborator' as const,
+    puesto: 'Cajero/a',
     email: 'milagros.vega@farmacity.com',
     branch: 'Farmacity Salta Centro',
     domicilio: {
@@ -338,6 +367,7 @@ const DEMO_PROFILES = [
     legajo: '10019',
     fullName: 'Rodrigo Ibáñez',
     role: 'collaborator' as const,
+    puesto: 'Farmacéutico/a',
     email: 'rodrigo.ibanez@farmacity.com',
     branch: 'Farmacity Montevideo Pocitos',
     domicilio: {
@@ -352,6 +382,7 @@ const DEMO_PROFILES = [
     legajo: '10020',
     fullName: 'Antonella Ferreira',
     role: 'collaborator' as const,
+    puesto: 'Encargado/a de turno',
     email: 'antonella.ferreira@farmacity.com',
     branch: 'Farmacity Montevideo Pocitos',
     domicilio: {
@@ -366,6 +397,7 @@ const DEMO_PROFILES = [
     legajo: '10021',
     fullName: 'Emiliano Paz',
     role: 'collaborator' as const,
+    puesto: 'Repositor/a',
     email: 'emiliano.paz@farmacity.com',
     branch: 'Farmacity Mar del Plata',
     domicilio: {
@@ -380,6 +412,7 @@ const DEMO_PROFILES = [
     legajo: '10022',
     fullName: 'Catalina Núñez',
     role: 'collaborator' as const,
+    puesto: 'Auxiliar de farmacia',
     email: 'catalina.nunez@farmacity.com',
     branch: 'Farmacity Mar del Plata',
     domicilio: {
@@ -394,6 +427,7 @@ const DEMO_PROFILES = [
     legajo: '10023',
     fullName: 'Ignacio Pedrosa',
     role: 'collaborator' as const,
+    puesto: 'Cajero/a',
     email: 'ipedrosa.dev@gmail.com',
     branch: 'Farmacity Palermo',
     domicilio: {
@@ -412,6 +446,7 @@ const DEMO_PROFILES = [
     legajo: '10024',
     fullName: 'Ignacio Pedrosa (SMTP test)',
     role: 'collaborator' as const,
+    puesto: 'Farmacéutico/a',
     email: 'ignaciopedrosa1998@gmail.com',
     branch: 'Farmacity Palermo',
     domicilio: {
@@ -426,6 +461,7 @@ const DEMO_PROFILES = [
     legajo: '10025',
     fullName: 'Martín Saleme',
     role: 'collaborator' as const,
+    puesto: 'Encargado/a de turno',
     email: 'martinsaleme@hotmail.com',
     branch: 'Farmacity Belgrano',
     domicilio: {
@@ -499,7 +535,7 @@ async function main() {
     const estado = await prisma.estadoSolicitud.upsert({
       where: { nombre },
       update: {},
-      create: { nombre },
+      create: { nombre, ...ESTADO_META[nombre] },
     });
     estadoIdByNombre.set(nombre, estado.id);
   }
@@ -573,6 +609,7 @@ async function main() {
         nombre: demo.fullName,
         rol: { connect: { nombre: demo.role } },
         email: demo.email,
+        descripcionPuesto: demo.puesto,
       },
       create: {
         id: authUserId,
@@ -580,6 +617,7 @@ async function main() {
         nombre: demo.fullName,
         rol: { connect: { nombre: demo.role } },
         email: demo.email,
+        descripcionPuesto: demo.puesto,
       },
     });
 
